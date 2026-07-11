@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}注册{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="bi bi-person-plus-fill text-primary" style="font-size: 2.5rem;"></i>
+                    <h3 class="mt-2 fw-bold">注册知喻</h3>
+                    <p class="text-muted small">创建你的账号</p>
+                </div>
+
+                <div id="alert-area"></div>
+
+                <form id="register-form">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" name="username" class="form-control" required autocomplete="username">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">邮箱</label>
+                        <input type="email" name="email" class="form-control" required autocomplete="email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码</label>
+                        <input type="password" name="password" class="form-control" required minlength="6" autocomplete="new-password">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">昵称（可选）</label>
+                        <input type="text" name="display_name" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">身份</label>
+                        <select name="role" class="form-select">
+                            <option value="student">学生</option>
+                            <option value="teacher">老师</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
+                        <i class="bi bi-person-check me-1"></i>注册
+                    </button>
+                </form>
+
+                <div class="text-center mt-3">
+                    <span class="text-muted small">已有账号？</span>
+                    <a href="/login" class="small">立即登录</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('register-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = new FormData(this);
+    const data = {
+        username: form.get('username'),
+        email: form.get('email'),
+        password: form.get('password'),
+        role: form.get('role'),
+        display_name: form.get('display_name') || null
+    };
+    try {
+        const resp = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (resp.redirected) {
+            window.location.href = resp.url;
+        } else if (!resp.ok) {
+            const err = await resp.json();
+            showAlert(err.detail || '注册失败', 'danger');
+        }
+    } catch (err) {
+        showAlert('网络错误，请重试', 'danger');
+    }
+});
+
+function showAlert(msg, type) {
+    const area = document.getElementById('alert-area');
+    area.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show">${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+}
+</script>
+{% endblock %}

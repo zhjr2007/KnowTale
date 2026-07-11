@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}登录{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="bi bi-mortarboard-fill text-primary" style="font-size: 2.5rem;"></i>
+                    <h3 class="mt-2 fw-bold">登录知喻</h3>
+                    <p class="text-muted small">多智能体协同课后学习平台</p>
+                </div>
+
+                <div id="alert-area"></div>
+
+                <form id="login-form">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" name="username" class="form-control" required autocomplete="username">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码</label>
+                        <input type="password" name="password" class="form-control" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
+                        <i class="bi bi-box-arrow-in-right me-1"></i>登录
+                    </button>
+                </form>
+
+                <div class="text-center mt-3">
+                    <span class="text-muted small">还没有账号？</span>
+                    <a href="/register" class="small">立即注册</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('login-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = new FormData(this);
+    const data = {
+        username: form.get('username'),
+        password: form.get('password')
+    };
+    try {
+        const resp = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (resp.redirected) {
+            window.location.href = resp.url;
+        } else if (!resp.ok) {
+            const err = await resp.json();
+            showAlert(err.detail || '登录失败', 'danger');
+        }
+    } catch (err) {
+        showAlert('网络错误，请重试', 'danger');
+    }
+});
+
+function showAlert(msg, type) {
+    const area = document.getElementById('alert-area');
+    area.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show">${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+}
+</script>
+{% endblock %}

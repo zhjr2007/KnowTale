@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}我的课程{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-grid-fill me-2"></i>我的课程
+    </h4>
+    {% if user.role == 'teacher' %}
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createCourseModal">
+        <i class="bi bi-plus-lg me-1"></i>创建课程
+    </button>
+    {% endif %}
+</div>
+
+<div class="row g-4" id="course-list">
+    <div class="col-12 text-center text-muted py-5">
+        <i class="bi bi-journal-text" style="font-size: 3rem;"></i>
+        <p class="mt-2">暂无课程</p>
+    </div>
+</div>
+
+{% if user.role == 'teacher' %}
+<div class="modal fade" id="createCourseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">创建课程</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="create-alert"></div>
+                <form id="create-course-form">
+                    <div class="mb-3">
+                        <label class="form-label">课程名称</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">课程描述</label>
+                        <textarea name="description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">创建</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadCourses() {
+    try {
+        const resp = await fetch('/api/courses');
+        if (resp.ok) {
+            const courses = await resp.json();
+            const container = document.getElementById('course-list');
+            if (courses.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12 text-center text-muted py-5">
+                        <i class="bi bi-journal-text" style="font-size: 3rem;"></i>
+                        <p class="mt-2">暂无课程</p>
+                    </div>`;
+            } else {
+                container.innerHTML = courses.map(c => `
+                    <div class="col-md-4">
+                        <a href="/courses/${c.id}" class="text-decoration-none">
+                            <div class="card course-card h-100 border-0 shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold text-dark">${c.name}</h5>
+                                    <p class="card-text text-muted small">${c.description || '暂无描述'}</p>
+                                    <div class="d-flex justify-content-between align-items-center mt-3">
+                                        <span class="badge bg-light text-primary">${c.student_count || 0} 名学生</span>
+                                        <small class="text-muted">${c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (err) {
+        console.error('Failed to load courses:', err);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadCourses);
+
+const createForm = document.getElementById('create-course-form');
+if (createForm) {
+    createForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const form = new FormData(this);
+        const data = {
+            name: form.get('name'),
+            description: form.get('description') || ''
+        };
+        try {
+            const resp = await fetch('/api/courses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (resp.ok) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('createCourseModal'));
+                modal.hide();
+                this.reset();
+                loadCourses();
+            } else {
+                const err = await resp.json();
+                document.getElementById('create-alert').innerHTML =
+                    `<div class="alert alert-danger">${err.detail || '创建失败'}</div>`;
+            }
+        } catch (err) {
+            document.getElementById('create-alert').innerHTML =
+                `<div class="alert alert-danger">网络错误</div>`;
+        }
+    });
+}
+</script>
+{% endblock %}

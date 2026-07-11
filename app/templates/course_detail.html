@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}课程详情{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <a href="/dashboard" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程列表
+    </a>
+</div>
+
+<div id="course-info" class="mb-4">
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">加载课程信息...</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4 text-center text-muted py-5">
+                <i class="bi bi-chat-dots" style="font-size: 3rem;"></i>
+                <p class="mt-2">学习群聊功能即将上线</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-tools me-2"></i>学习工具</h6>
+                <div class="list-group list-group-flush">
+                    <a href="#" class="list-group-item list-group-item-action disabled text-muted">
+                        <i class="bi bi-question-circle me-2"></i>题库练习
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action disabled text-muted">
+                        <i class="bi bi-journal me-2"></i>错题本
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action disabled text-muted">
+                        <i class="bi bi-shuffle me-2"></i>知识点抽背
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action disabled text-muted">
+                        <i class="bi bi-diagram-3 me-2"></i>思维导图
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    const courseId = {{ course_id }};
+    try {
+        const resp = await fetch(`/api/courses/${courseId}`);
+        if (resp.ok) {
+            const course = await resp.json();
+            document.getElementById('course-info').innerHTML = `
+                <h4 class="fw-bold"><i class="bi bi-book-fill me-2"></i>${course.name}</h4>
+                <p class="text-muted">${course.description || '暂无描述'}</p>
+                <small class="text-muted">
+                    <i class="bi bi-person me-1"></i>${course.teacher_name}
+                </small>
+            `;
+        } else {
+            document.getElementById('course-info').innerHTML = `<div class="alert alert-danger">课程加载失败</div>`;
+        }
+    } catch (err) {
+        document.getElementById('course-info').innerHTML = `<div class="alert alert-danger">网络错误</div>`;
+    }
+});
+</script>
+{% endblock %}
