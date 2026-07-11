@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}错题本{% endblock %}
+{% block content %}
+<div class="mb-3">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程
+    </a>
+</div>
+
+<h5 class="fw-bold mb-3"><i class="bi bi-journal me-2"></i>错题本</h5>
+
+<div id="wrong-list">
+    <div class="text-center py-4 text-muted">
+        <div class="spinner-border spinner-border-sm me-1"></div>加载中...
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadWrongBook() {
+    try {
+        const resp = await fetch('/api/wrong-book/{{ course_id }}');
+        if (!resp.ok) throw new Error();
+        const records = await resp.json();
+        const list = document.getElementById('wrong-list');
+        if (records.length === 0) {
+            list.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-check-circle" style="font-size:2rem"></i><p class="mt-2">暂无错题，继续保持！</p></div>';
+            return;
+        }
+        list.innerHTML = records.map(r => `
+            <div class="card shadow-sm border-0 mb-3 border-start border-danger border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <span class="badge bg-light text-primary mb-2">${r.knowledge_point || '未分类'}</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="deleteRecord(${r.id})">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                    <p class="fw-bold">${r.question_content}</p>
+                    <div class="small">
+                        <p class="text-danger mb-1"><strong>你的答案：</strong>${r.student_answer}</p>
+                        <p class="text-success mb-0"><strong>正确答案：</strong>${r.correct_answer}</p>
+                    </div>
+                    <small class="text-muted">${new Date(r.created_at).toLocaleString()}</small>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        document.getElementById('wrong-list').innerHTML = '<div class="alert alert-danger">加载失败</div>';
+    }
+}
+
+async function deleteRecord(id) {
+    if (!confirm('确定删除这条错题记录？')) return;
+    try {
+        const resp = await fetch(`/api/wrong-book/${id}`, { method: 'DELETE' });
+        if (resp.ok) loadWrongBook();
+    } catch (e) {}
+}
+
+document.addEventListener('DOMContentLoaded', loadWrongBook);
+</script>
+{% endblock %}

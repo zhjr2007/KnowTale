@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}批改结果{% endblock %}
+{% block content %}
+<div class="mb-3">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程
+    </a>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body text-center py-4">
+        <h4 class="fw-bold">批改结果</h4>
+        <div class="display-3 fw-bold {% if percentage >= 60 %}text-success{% else %}text-danger{% endif %}">
+            {{ percentage }}%
+        </div>
+        <p class="text-muted">{{ score }} / {{ total }} 题正确</p>
+    </div>
+</div>
+
+{% for item in details %}
+<div class="card shadow-sm border-0 mb-3 {% if item.is_correct %}border-start border-success border-4{% else %}border-start border-danger border-4{% endif %}">
+    <div class="card-body">
+        <div class="d-flex align-items-center mb-2">
+            <span class="me-2 fs-5">{% if item.is_correct %}✅{% else %}❌{% endif %}</span>
+            <strong>{{ item.content }}</strong>
+        </div>
+        {% if not item.is_correct %}
+        <div class="small">
+            <p class="mb-1 text-danger"><strong>你的答案：</strong>{{ item.student_answer or '未作答' }}</p>
+            <p class="mb-0 text-success"><strong>正确答案：</strong>{{ item.correct_answer }}</p>
+            {% if item.feedback %}
+            <p class="mb-0 text-muted mt-1"><strong>评语：</strong>{{ item.feedback }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+<a href="/courses/{{ course_id }}" class="btn btn-outline-primary w-100">返回课程</a>
+{% endblock %}

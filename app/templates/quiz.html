@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}练习 - {{ course_name }}{% endblock %}
+{% block content %}
+<div class="mb-3">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程
+    </a>
+</div>
+
+<h5 class="fw-bold mb-3"><i class="bi bi-pencil-square me-2"></i>{{ quiz.title }}</h5>
+
+<form id="quiz-form">
+    {% for q in questions %}
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-2">
+                <span class="badge bg-light text-primary">{{ q.knowledge_point }}</span>
+                <span class="badge {% if q.difficulty == 'easy' %}bg-success{% elif q.difficulty == 'hard' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                    {{ {'easy':'简单','medium':'中等','hard':'困难'}[q.difficulty] or q.difficulty }}
+                </span>
+            </div>
+            <p class="fw-bold mb-2">{{ loop.index }}. {{ q.content }}</p>
+
+            {% if q.type == 'choice' and q.options %}
+                {% for opt in q.options %}
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="radio" name="q_{{ q.id }}" value="{{ opt[0] }}" id="opt_{{ q.id }}_{{ loop.index }}" required>
+                    <label class="form-check-label" for="opt_{{ q.id }}_{{ loop.index }}">{{ opt }}</label>
+                </div>
+                {% endfor %}
+            {% else %}
+                <textarea class="form-control" name="q_{{ q.id }}" rows="2" placeholder="输入你的答案..."></textarea>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold mb-4">
+        <i class="bi bi-check-circle me-1"></i>提交批改
+    </button>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('quiz-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = new FormData(this);
+    const answers = {};
+    {% for q in questions %}
+    answers[{{ q.id }}] = form.get('q_{{ q.id }}') || '';
+    {% endfor %}
+
+    const btn = this.querySelector('button[type=submit]');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>批改中...';
+
+    try {
+        const resp = await fetch('/api/quiz/{{ quiz.id }}/submit', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ answers })
+        });
+        if (resp.ok) {
+            const result = await resp.json();
+            window.location.href = `/quiz/{{ quiz.id }}/result/${result.attempt_id}`;
+        } else {
+            alert('提交失败');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>提交批改';
+        }
+    } catch (e) {
+        alert('网络错误');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>提交批改';
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}思维导图{% endblock %}
+{% block content %}
+<div class="mb-3">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程
+    </a>
+</div>
+
+<h5 class="fw-bold mb-3"><i class="bi bi-diagram-3 me-2"></i>课程思维导图</h5>
+
+<div id="mindmap-loading" class="text-center py-5">
+    <div class="spinner-border text-primary mb-2"></div>
+    <p class="text-muted">正在生成思维导图...</p>
+</div>
+
+<pre id="mindmap-content" class="card shadow-sm border-0 p-4 d-none" style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.8;"></pre>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const resp = await fetch('/api/mindmap/{{ course_id }}');
+        if (resp.ok) {
+            const data = await resp.json();
+            document.getElementById('mindmap-loading').classList.add('d-none');
+            const pre = document.getElementById('mindmap-content');
+            pre.textContent = data.mindmap;
+            pre.classList.remove('d-none');
+        } else {
+            document.getElementById('mindmap-loading').innerHTML = '<div class="alert alert-danger">生成失败</div>';
+        }
+    } catch (e) {
+        document.getElementById('mindmap-loading').innerHTML = '<div class="alert alert-danger">网络错误</div>';
+    }
+});
+</script>
+{% endblock %}
