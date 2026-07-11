@@ -1,0 +1,8 @@
+{
+  "display_name": "知喻 - 账号管理",
+  "description": "教师/学生双角色账号注册登录与权限管理",
+  "version": "1.0.0",
+  "author": "KnowTale Team",
+  "license": "AGPL-3.0",
+  "entry": "index.js"
+}

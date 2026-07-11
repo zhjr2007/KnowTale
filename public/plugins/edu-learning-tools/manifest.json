@@ -1,0 +1,8 @@
+{
+  "display_name": "知喻 - 学习工具",
+  "description": "应试学习工具集：题库、错题本、知识抽背、思维导图",
+  "version": "1.0.0",
+  "author": "KnowTale Team",
+  "license": "AGPL-3.0",
+  "entry": "index.js"
+}
