@@ -6,6 +6,10 @@ data/*
 !data/.gitkeep
 *.db
 
+# Uploads (keep .gitkeep)
+uploads/*
+!uploads/.gitkeep
+
 # Python
 __pycache__/
 *.py[cod]

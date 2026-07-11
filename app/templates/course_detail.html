@@ -14,32 +14,136 @@
     </div>
 </div>
 
-<div class="row g-4">
-    <div class="col-lg-8">
+<ul class="nav nav-tabs mb-4" id="courseTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button">
+            <i class="bi bi-chat-dots me-1"></i>学习群聊
+        </button>
+    </li>
+    {% if user.role == 'teacher' %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="kb-tab" data-bs-toggle="tab" data-bs-target="#knowledge" type="button">
+            <i class="bi bi-book me-1"></i>知识库
+        </button>
+    </li>
+    {% endif %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tools-tab" data-bs-toggle="tab" data-bs-target="#tools" type="button">
+            <i class="bi bi-tools me-1"></i>学习工具
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="chat">
         <div class="card shadow-sm border-0">
-            <div class="card-body p-4 text-center text-muted py-5">
+            <div class="card-body text-center text-muted py-5">
                 <i class="bi bi-chat-dots" style="font-size: 3rem;"></i>
-                <p class="mt-2">学习群聊功能即将上线</p>
+                <p class="mt-3">学习群聊功能即将上线</p>
+                <p class="small">AI教师 + 各类AI学生将在这里与你互动</p>
             </div>
         </div>
     </div>
-    <div class="col-lg-4">
+
+    {% if user.role == 'teacher' %}
+    <div class="tab-pane fade" id="knowledge">
         <div class="card shadow-sm border-0">
             <div class="card-body p-4">
-                <h6 class="fw-bold mb-3"><i class="bi bi-tools me-2"></i>学习工具</h6>
-                <div class="list-group list-group-flush">
-                    <a href="#" class="list-group-item list-group-item-action disabled text-muted">
-                        <i class="bi bi-question-circle me-2"></i>题库练习
-                    </a>
-                    <a href="#" class="list-group-item list-group-item-action disabled text-muted">
-                        <i class="bi bi-journal me-2"></i>错题本
-                    </a>
-                    <a href="#" class="list-group-item list-group-item-action disabled text-muted">
-                        <i class="bi bi-shuffle me-2"></i>知识点抽背
-                    </a>
-                    <a href="#" class="list-group-item list-group-item-action disabled text-muted">
-                        <i class="bi bi-diagram-3 me-2"></i>思维导图
-                    </a>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-database me-2"></i>课程知识库</h6>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                        <i class="bi bi-upload me-1"></i>上传课件
+                    </button>
+                </div>
+
+                <div id="kb-stats" class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded text-center">
+                            <div class="h4 mb-0 text-primary" id="doc-count">0</div>
+                            <small class="text-muted">文档数</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded text-center">
+                            <div class="h4 mb-0 text-primary" id="chunk-count">0</div>
+                            <small class="text-muted">知识片段</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-secondary btn-sm w-100 h-100" id="rebuild-btn" onclick="rebuildKnowledge()">
+                            <i class="bi bi-arrow-repeat me-1"></i>重建索引
+                        </button>
+                    </div>
+                </div>
+
+                <div id="doc-list" class="list-group">
+                    <div class="text-center text-muted py-3">暂无课件</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="uploadModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">上传课件</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="upload-alert"></div>
+                        <form id="upload-form">
+                            <div class="mb-3">
+                                <label class="form-label">选择文件（PDF、Word、PPT）</label>
+                                <input type="file" name="file" class="form-control" accept=".pdf,.docx,.doc,.pptx,.ppt" required>
+                            </div>
+                            <div class="progress mb-3 d-none" id="upload-progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">正在上传解析...</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">上传并索引</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="tab-pane fade" id="tools">
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center py-5">
+                        <i class="bi bi-question-circle text-primary" style="font-size: 2rem;"></i>
+                        <h6 class="mt-2">题库练习</h6>
+                        <p class="small text-muted">即将上线</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center py-5">
+                        <i class="bi bi-journal text-primary" style="font-size: 2rem;"></i>
+                        <h6 class="mt-2">错题本</h6>
+                        <p class="small text-muted">即将上线</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center py-5">
+                        <i class="bi bi-shuffle text-primary" style="font-size: 2rem;"></i>
+                        <h6 class="mt-2">知识点抽背</h6>
+                        <p class="small text-muted">即将上线</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center py-5">
+                        <i class="bi bi-diagram-3 text-primary" style="font-size: 2rem;"></i>
+                        <h6 class="mt-2">思维导图</h6>
+                        <p class="small text-muted">即将上线</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -49,25 +153,96 @@
 
 {% block extra_scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', async function() {
-    const courseId = {{ course_id }};
+const courseId = {{ course_id }};
+
+async function loadCourse() {
     try {
         const resp = await fetch(`/api/courses/${courseId}`);
         if (resp.ok) {
-            const course = await resp.json();
+            const c = await resp.json();
             document.getElementById('course-info').innerHTML = `
-                <h4 class="fw-bold"><i class="bi bi-book-fill me-2"></i>${course.name}</h4>
-                <p class="text-muted">${course.description || '暂无描述'}</p>
-                <small class="text-muted">
-                    <i class="bi bi-person me-1"></i>${course.teacher_name}
-                </small>
+                <h4 class="fw-bold"><i class="bi bi-book-fill me-2"></i>${c.name}</h4>
+                <p class="text-muted">${c.description || '暂无描述'}</p>
+                <small class="text-muted"><i class="bi bi-person me-1"></i>${c.teacher_name}</small>
             `;
-        } else {
-            document.getElementById('course-info').innerHTML = `<div class="alert alert-danger">课程加载失败</div>`;
         }
-    } catch (err) {
-        document.getElementById('course-info').innerHTML = `<div class="alert alert-danger">网络错误</div>`;
+    } catch (e) {
+        document.getElementById('course-info').innerHTML = `<div class="alert alert-danger">加载失败</div>`;
     }
+}
+
+async function loadKnowledge() {
+    try {
+        const resp = await fetch(`/api/knowledge/stats/${courseId}`);
+        if (resp.ok) {
+            const data = await resp.json();
+            document.getElementById('doc-count').textContent = data.document_count;
+            document.getElementById('chunk-count').textContent = data.chunk_count;
+
+            const list = document.getElementById('doc-list');
+            if (data.documents.length === 0) {
+                list.innerHTML = '<div class="text-center text-muted py-3">暂无课件</div>';
+            } else {
+                list.innerHTML = data.documents.map(d => `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-file-text me-2"></i>${d.filename}</span>
+                        <span class="badge bg-light text-primary">${d.chunk_count} 片段</span>
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadCourse();
+    loadKnowledge();
 });
+
+const uploadForm = document.getElementById('upload-form');
+if (uploadForm) {
+    uploadForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const form = new FormData(this);
+        const progress = document.getElementById('upload-progress');
+        progress.classList.remove('d-none');
+        document.getElementById('upload-alert').innerHTML = '';
+
+        try {
+            const resp = await fetch(`/api/knowledge/upload/${courseId}`, { method: 'POST', body: form });
+            progress.classList.add('d-none');
+            if (resp.ok) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+                modal.hide();
+                this.reset();
+                loadKnowledge();
+            } else {
+                const err = await resp.json();
+                document.getElementById('upload-alert').innerHTML = `<div class="alert alert-danger">${err.detail || '上传失败'}</div>`;
+            }
+        } catch (e) {
+            progress.classList.add('d-none');
+            document.getElementById('upload-alert').innerHTML = `<div class="alert alert-danger">网络错误</div>`;
+        }
+    });
+}
+
+async function rebuildKnowledge() {
+    if (!confirm('确定重建知识库索引？')) return;
+    const btn = document.getElementById('rebuild-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>重建中...';
+    try {
+        const resp = await fetch(`/api/knowledge/rebuild/${courseId}`, { method: 'POST' });
+        if (resp.ok) {
+            loadKnowledge();
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>重建索引';
+    }
+}
 </script>
 {% endblock %}

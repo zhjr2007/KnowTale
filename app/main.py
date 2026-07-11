@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import init_db
 from app.dependencies import get_current_user, require_user
 from app.models.user import User
-from app.routers import auth, courses
+from app.routers import auth, courses, knowledge
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -42,6 +42,7 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(auth.router)
 app.include_router(courses.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/")

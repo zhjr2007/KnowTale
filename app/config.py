@@ -21,10 +21,15 @@ class Settings:
     JWT_EXPIRATION_HOURS: int = int(os.getenv("JWT_EXPIRATION_HOURS", "168"))
     JWT_ALGORITHM: str = "HS256"
 
-    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
-    DEEPSEEK_BASE_URL: str = os.getenv(
-        "DEEPSEEK_BASE_URL", "https://api.deepseek.com"
+    BAILIAN_API_KEY: str = os.getenv("BAILIAN_API_KEY", "")
+    BAILIAN_BASE_URL: str = os.getenv(
+        "BAILIAN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
     )
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen-plus")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-v3")
+    RERANK_MODEL: str = os.getenv("RERANK_MODEL", "text-rerank-v1")
+
+    MINERU_URL: str = os.getenv("MINERU_URL", "http://localhost:8001")
 
     CHROMA_HOST: str = os.getenv("CHROMA_HOST", "localhost")
     CHROMA_PORT: int = int(os.getenv("CHROMA_PORT", "8000"))

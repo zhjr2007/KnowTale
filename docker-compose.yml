@@ -11,8 +11,10 @@ services:
       - ./.env:/app/.env
     environment:
       - CHROMA_HOST=chroma
+      - MINERU_URL=http://mineru:8001
     depends_on:
       - chroma
+      - mineru
     restart: unless-stopped
 
   chroma:
@@ -22,4 +24,19 @@ services:
     environment:
       - IS_PERSISTENT=TRUE
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
+    restart: unless-stopped
+
+  mineru:
+    image: opengsg/mineru:latest
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./uploads:/app/uploads
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     restart: unless-stopped
