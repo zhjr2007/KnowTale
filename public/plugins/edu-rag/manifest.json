@@ -1,0 +1,8 @@
+{
+  "display_name": "知喻 - 课程知识库",
+  "description": "教育场景增强型 RAG 知识库系统",
+  "version": "1.0.0",
+  "author": "KnowTale Team",
+  "license": "AGPL-3.0",
+  "entry": "index.js"
+}

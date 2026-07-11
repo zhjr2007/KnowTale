@@ -1,0 +1,47 @@
+# 知喻 KnowTale - Git忽略规则
+
+# 环境配置
+.env
+config.yaml
+config.conf
+
+# 依赖
+node_modules/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行时数据
+data/
+uploads/
+cache/
+vectors/
+backups/
+logs/
+*.log
+*.jsonl
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 构建输出
+dist/
+build/
+*.egg-info/
+
+# 文档解析临时文件
+/tmp/
+
+# 敏感信息
+secrets.json
+*.key
+*.pem

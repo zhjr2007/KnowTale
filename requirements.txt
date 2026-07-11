@@ -1,0 +1,32 @@
+# 知喻 KnowTale 依赖清单
+# Python 3.10+
+
+# Web 框架
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+aiofiles>=23.2.0
+
+# 认证与安全
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+
+# 向量检索
+chromadb>=0.4.22
+sentence-transformers>=2.2.0
+
+# 文档解析
+PyMuPDF>=1.23.0
+python-pptx>=0.6.21
+python-docx>=1.1.0
+markdown-it-py>=3.0.0
+
+# 数据与工具
+sqlalchemy>=2.0.0
+aiosqlite>=0.19.0
+httpx>=0.25.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# 可选：MinerU GPU 文档解析（需额外安装）
+# mineru>=0.1.0
