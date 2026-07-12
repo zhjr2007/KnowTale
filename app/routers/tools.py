@@ -419,8 +419,6 @@ async def check_review_answer(body: dict):
     return {"is_correct": is_correct, "feedback": feedback, "correct_answer": correct}
 
 
-# ─── AI 陪练 ──────────────────────────────────────────
-
 PEER_PERSONAS = [
     {"name": "小明", "type": "勤奋型", "trait": "学习认真但偶尔理解偏差，答案大部分正确但不够精确"},
     {"name": "小红", "type": "粗心型", "trait": "基础不错但容易粗心，答案有时遗漏关键点"},
@@ -513,7 +511,7 @@ async def get_peer_question(
     }
 
 
-# ─── 练习统计 ──────────────────────────────────────────
+# ─── 练习统计 ─
 
 @router.get("/api/quiz/stats/{course_id}")
 async def quiz_stats(
