@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,8 @@ router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
 UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
+
+_preview_cache: dict[str, dict] = {}
 
 
 @router.post("/upload/{course_id}")
@@ -41,6 +44,7 @@ async def upload_document(
     if not parsed.strip():
         raise HTTPException(status_code=400, detail="文档解析失败，内容为空")
 
+    parse_mode = "基础解析" if "【解析模式：基础解析】" in parsed else "MinerU 深度解析"
     chunk_count = await index_document(course_id, parsed, {"filename": file.filename})
 
     doc = KnowledgeDocument(
@@ -57,6 +61,7 @@ async def upload_document(
         "message": "上传并索引成功",
         "filename": file.filename,
         "chunk_count": chunk_count,
+        "parse_mode": parse_mode,
     }
 
 
@@ -155,4 +160,83 @@ async def knowledge_stats(
             {"filename": d.filename, "chunk_count": d.chunk_count}
             for d in docs
         ],
+    }
+
+
+@router.post("/preview/{course_id}")
+async def preview_document(
+    course_id: int,
+    file: UploadFile = File(...),
+    user: User = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+):
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course = course_result.scalar_one_or_none()
+    if not course or course.teacher_id != user.id:
+        raise HTTPException(status_code=403, detail="无权操作该课程")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in (".pdf", ".docx", ".doc", ".pptx", ".ppt", ".txt", ".md"):
+        raise HTTPException(status_code=400, detail="不支持的文件格式")
+
+    save_path = UPLOADS_DIR / f"{course_id}_preview_{file.filename}"
+    content = await file.read()
+    save_path.write_bytes(content)
+
+    parsed = await parse_document(save_path)
+    if not parsed.strip():
+        save_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="文档解析失败，内容为空")
+
+    parse_mode = "基础解析" if "【解析模式：基础解析】" in parsed else "MinerU 深度解析"
+    preview_text = parsed[:500]
+
+    token = str(uuid.uuid4())
+    _preview_cache[token] = {
+        "course_id": course_id,
+        "filename": file.filename,
+        "file_path": str(save_path),
+        "parsed": parsed,
+        "parse_mode": parse_mode,
+    }
+
+    return {
+        "token": token,
+        "filename": file.filename,
+        "preview": preview_text,
+        "parse_mode": parse_mode,
+        "total_length": len(parsed),
+    }
+
+
+@router.post("/confirm/{course_id}")
+async def confirm_document(
+    course_id: int,
+    token: str = Form(...),
+    user: User = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+):
+    cache = _preview_cache.pop(token, None)
+    if not cache or cache["course_id"] != course_id:
+        raise HTTPException(status_code=400, detail="预览令牌无效或已过期")
+
+    chunk_count = await index_document(
+        course_id, cache["parsed"], {"filename": cache["filename"]}
+    )
+
+    doc = KnowledgeDocument(
+        course_id=course_id,
+        filename=cache["filename"],
+        file_path=cache["file_path"],
+        file_type=Path(cache["filename"]).suffix.lower(),
+        chunk_count=chunk_count,
+    )
+    db.add(doc)
+    await db.commit()
+
+    return {
+        "message": "确认并索引成功",
+        "filename": cache["filename"],
+        "chunk_count": chunk_count,
+        "parse_mode": cache["parse_mode"],
     }
