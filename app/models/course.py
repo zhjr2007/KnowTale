@@ -11,12 +11,9 @@ class Course(Base):
     name = Column(String(200), index=True, nullable=False)
     description = Column(Text, nullable=True)
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    invite_code = Column(String(6), unique=True, index=True, nullable=True)
 
     knowledge_base_id = Column(String(100), nullable=True)
-    status = Column(String(20), nullable=False, default="active")
-
-    teacher_role_card = Column(Text, nullable=True)
-    student_roles_config = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
