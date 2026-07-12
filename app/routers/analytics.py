@@ -7,7 +7,7 @@ from app.models.course import Course
 from app.models.user import User
 from app.dependencies import require_user, require_teacher
 from app.services.analytics import analyze_conversations, generate_report, get_latest_report
-from app.services.role_updater import update_student_roles, trigger_analysis
+from app.services.role_updater import update_student_roles
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -44,9 +44,9 @@ async def trigger_analytics(
     if not course:
         raise HTTPException(status_code=404, detail="课程不存在")
 
-    result_data = await trigger_analysis(course_id)
-    result_data["report"]["course_name"] = course.name
-    return result_data
+    data = await generate_report(course_id, db=db)
+    data["course_name"] = course.name
+    return data
 
 
 @router.post("/{course_id}/update-roles")
