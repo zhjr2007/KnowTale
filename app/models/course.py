@@ -14,6 +14,7 @@ class Course(Base):
     invite_code = Column(String(6), unique=True, index=True, nullable=True)
 
     knowledge_base_id = Column(String(100), nullable=True)
+    status = Column(String(20), nullable=False, default="active")
 
     teacher_role_card = Column(Text, nullable=True)
     student_roles_config = Column(Text, nullable=True)
