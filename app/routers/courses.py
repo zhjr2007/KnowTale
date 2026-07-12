@@ -1,7 +1,7 @@
 import random
 import string
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -19,6 +19,12 @@ def _generate_invite_code() -> str:
 
 
 class CreateCourseRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+
+class UpdateCourseRequest(BaseModel):
     name: str
     description: str = ""
 
@@ -95,6 +101,9 @@ async def create_course(
         "id": course.id,
         "name": course.name,
         "description": course.description,
+        "teacher_name": teacher.display_name if teacher else "未知",
+        "teacher_id": course.teacher_id,
+        "status": course.status,
         "invite_code": course.invite_code,
     }
 
