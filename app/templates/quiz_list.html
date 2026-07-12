@@ -63,19 +63,23 @@ async function loadQuizzes() {
             container.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox" style="font-size:2rem"></i><p class="mt-2">暂无练习</p></div>';
             return;
         }
-        container.innerHTML = quizzes.map(q => `
+        container.innerHTML = quizzes.map(q => {
+            const attemptHtml = q.attempt
+                ? `<span class="badge ${q.attempt.percentage >= 60 ? 'bg-success' : 'bg-danger'} ms-2">${q.attempt.score}/${q.attempt.total} (${q.attempt.percentage}%)</span>`
+                : '<span class="badge bg-secondary ms-2">未完成</span>';
+            return `
             <a href="/quiz/${q.id}" class="text-decoration-none">
                 <div class="card shadow-sm border-0 mb-2">
                     <div class="card-body d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="mb-0 fw-bold">${q.title}</h6>
+                            <h6 class="mb-0 fw-bold">${q.title} ${attemptHtml}</h6>
                             <small class="text-muted">${q.question_count} 题 · ${new Date(q.created_at).toLocaleDateString()}</small>
                         </div>
                         <i class="bi bi-chevron-right text-primary"></i>
                     </div>
                 </div>
-            </a>
-        `).join('');
+            </a>`;
+        }).join('');
     } catch (e) {
         document.getElementById('quiz-list').innerHTML = '<div class="alert alert-danger">加载失败</div>';
     }
