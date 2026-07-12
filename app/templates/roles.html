@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}AI角色管理{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程
+    </a>
+</div>
+
+<h4 class="fw-bold mb-4"><i class="bi bi-robot me-2"></i>AI角色管理</h4>
+
+<!-- 教师角色卡 -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0"><i class="bi bi-person-badge me-2"></i>AI教师角色卡</h6>
+        <button class="btn btn-outline-primary btn-sm" onclick="generateTeacher()">
+            <i class="bi bi-arrow-repeat me-1"></i>重新生成
+        </button>
+    </div>
+    <div class="card-body" id="teacher-card">
+        <div class="text-center text-muted py-3">
+            <div class="spinner-border spinner-border-sm me-1"></div>加载中...
+        </div>
+    </div>
+</div>
+
+<!-- AI学生角色列表 -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0"><i class="bi bi-people me-2"></i>AI学生角色</h6>
+        <button class="btn btn-outline-primary btn-sm" onclick="generateStudents()">
+            <i class="bi bi-arrow-repeat me-1"></i>重新生成全部
+        </button>
+    </div>
+    <div class="card-body" id="students-container">
+        <div class="text-center text-muted py-3">
+            <div class="spinner-border spinner-border-sm me-1"></div>加载中...
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const courseId = {{ course_id }};
+
+async function loadRoles() {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/roles`);
+        if (!resp.ok) throw new Error('加载失败');
+        const data = await resp.json();
+
+        renderTeacherCard(data.teacher_role_card);
+        renderStudents(data.student_roles_config, data.student_templates);
+    } catch (e) {
+        document.getElementById('teacher-card').innerHTML = '<div class="alert alert-danger">加载角色数据失败</div>';
+        document.getElementById('students-container').innerHTML = '';
+    }
+}
+
+function renderTeacherCard(card) {
+    const container = document.getElementById('teacher-card');
+    if (!card) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-3">
+                <p>尚未生成教师角色卡</p>
+                <button class="btn btn-primary" onclick="generateTeacher()">
+                    <i class="bi bi-magic me-1"></i>生成教师角色
+                </button>
+            </div>
+        `;
+        return;
+    }
+    container.innerHTML = `
+        <div class="row g-3">
+            <div class="col-md-6">
+                <small class="text-muted">名称</small>
+                <p class="fw-bold">${card.name || '未知'}</p>
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted">人设定位</small>
+                <p>${card.personality || '无'}</p>
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted">教学风格</small>
+                <p>${card.teaching_style || '无'}</p>
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted">对话风格</small>
+                <p>${card.dialogue_style || '无'}</p>
+            </div>
+            <div class="col-12">
+                <small class="text-muted">开场白</small>
+                <p class="fst-italic">"${card.greeting || '无'}"</p>
+            </div>
+            <div class="col-12">
+                <small class="text-muted">知识边界</small>
+                <p>${card.knowledge_boundary || '无'}</p>
+            </div>
+        </div>
+    `;
+}
+
+function renderStudents(config, templates) {
+    const container = document.getElementById('students-container');
+    if (!config || !config.roles) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-3">
+                <p>尚未生成学生角色</p>
+                <button class="btn btn-primary" onclick="generateStudents()">
+                    <i class="bi bi-magic me-1"></i>生成学生角色
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    const studentTypes = ['basic', 'medium', 'advanced', 'senior'];
+    const typeLabels = { basic: '基础小问', medium: '中坚小固', advanced: '拓思考', senior: '学长知喻' };
+
+    let html = '';
+    for (const stype of studentTypes) {
+        const role = config.roles[stype] || {};
+        const rules = (config.speech_rules || {})[stype] || {};
+        const enabled = (config.enabled || {})[stype] !== false;
+        const label = typeLabels[stype] || stype;
+
+        html += `
+        <div class="border rounded p-3 mb-3 ${enabled ? '' : 'opacity-50'}">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <h6 class="fw-bold mb-1">
+                        <span class="badge bg-secondary me-2">${label}</span>
+                        ${role.name || label}
+                    </h6>
+                    <small class="text-muted">${role.type || ''}</small>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" ${enabled ? 'checked' : ''}
+                           onchange="toggleRole('${stype}', this.checked)">
+                </div>
+            </div>
+            <div class="mb-2">
+                <small class="text-muted">人设：</small>
+                <small>${role.personality || '无'}</small>
+            </div>
+            <div class="mb-2">
+                <small class="text-muted">开场白：</small>
+                <small class="fst-italic">"${role.greeting || '无'}"</small>
+            </div>
+
+            <hr class="my-2">
+            <small class="text-muted fw-bold">发言规则配置</small>
+            <div class="row g-2 mt-1">
+                <div class="col-md-3">
+                    <label class="form-label small">活跃度</label>
+                    <input type="range" class="form-range" min="0" max="1" step="0.1"
+                           value="${rules.activity_level ?? 0.5}"
+                           onchange="updateSettings('${stype}', {activity_level: parseFloat(this.value)})">
+                    <small class="text-muted">${rules.activity_level ?? 0.5}</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">触发模式</label>
+                    <select class="form-select form-select-sm" onchange="updateSettings('${stype}', {trigger_mode: this.value})">
+                        <option value="round_robin" ${rules.trigger_mode === 'round_robin' ? 'selected' : ''}>轮序发言</option>
+                        <option value="at" ${rules.trigger_mode === 'at' ? 'selected' : ''}>@提及触发</option>
+                        <option value="keyword" ${rules.trigger_mode === 'keyword' ? 'selected' : ''}>关键词触发</option>
+                        <option value="mixed" ${rules.trigger_mode === 'mixed' ? 'selected' : ''}>混合模式</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">发言间隔(条)</label>
+                    <input type="number" class="form-control form-control-sm" min="1" max="20"
+                           value="${rules.min_interval ?? 3}"
+                           onchange="updateSettings('${stype}', {min_interval: parseInt(this.value) || 3})">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">关键词</label>
+                    <input type="text" class="form-control form-control-sm"
+                           value="${(rules.keywords || []).join(', ')}"
+                           placeholder="逗号分隔"
+                           onchange="updateSettings('${stype}', {keywords: this.value.split(/[,，]/).map(s => s.trim()).filter(Boolean)})">
+                </div>
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+async function generateTeacher() {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/generate-teacher`, { method: 'POST' });
+        if (resp.ok) {
+            loadRoles();
+        } else {
+            const err = await resp.json();
+            alert('生成失败: ' + (err.detail || '未知错误'));
+        }
+    } catch (e) {
+        alert('网络错误');
+    }
+}
+
+async function generateStudents() {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/generate-students`, { method: 'POST' });
+        if (resp.ok) {
+            loadRoles();
+        } else {
+            const err = await resp.json();
+            alert('生成失败: ' + (err.detail || '未知错误'));
+        }
+    } catch (e) {
+        alert('网络错误');
+    }
+}
+
+async function toggleRole(roleType, enabled) {
+    await updateSettings(roleType, { enabled });
+}
+
+async function updateSettings(roleType, data) {
+    try {
+        await fetch(`/api/courses/${courseId}/roles/${roleType}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+    } catch (e) {
+        // ignore
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadRoles);
+</script>
+{% endblock %}

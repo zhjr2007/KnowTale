@@ -1,4 +1,5 @@
 import json
+import random
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +9,7 @@ from app.dependencies import require_user
 from app.models.user import User
 from app.models.course import Course
 from app.models.quiz import Quiz, Question, QuizAttempt, Answer, WrongBookRecord
-from app.services.quiz_generator import generate_quiz, grade_short_answer, generate_mindmap
+from app.services.quiz_generator import generate_quiz, grade_short_answer, generate_mindmap, generate_wrong_book_quiz
 from app.services.rag import search
 
 router = APIRouter(tags=["tools"])
@@ -73,11 +74,32 @@ async def list_quizzes(
         select(Quiz).where(Quiz.course_id == course_id).order_by(Quiz.created_at.desc())
     )
     quizzes = result.scalars().all()
+
+    quiz_ids = [q.id for q in quizzes]
+    attempt_map = {}
+    if quiz_ids:
+        a_result = await db.execute(
+            select(QuizAttempt)
+            .where(
+                QuizAttempt.quiz_id.in_(quiz_ids),
+                QuizAttempt.student_id == user.id,
+            )
+            .order_by(QuizAttempt.completed_at.desc())
+        )
+        for a in a_result.scalars().all():
+            if a.quiz_id not in attempt_map:
+                attempt_map[a.quiz_id] = a
+
     return [
         {
             "id": q.id, "title": q.title,
             "question_count": q.question_count,
             "created_at": q.created_at.isoformat() if q.created_at else None,
+            "attempt": {
+                "score": attempt_map[q.id].score,
+                "total": attempt_map[q.id].total,
+                "percentage": round(attempt_map[q.id].score / attempt_map[q.id].total * 100, 1) if attempt_map[q.id].total else 0,
+            } if q.id in attempt_map else None,
         }
         for q in quizzes
     ]
@@ -285,6 +307,62 @@ async def delete_wrong_record(
     await db.delete(record)
     await db.commit()
     return {"message": "已删除"}
+
+
+@router.post("/api/wrong-book/redo/{course_id}")
+async def redo_wrong_book(
+    course_id: int,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """基于错题本生成巩固练习"""
+    result = await db.execute(
+        select(WrongBookRecord)
+        .where(
+            WrongBookRecord.student_id == user.id,
+            WrongBookRecord.course_id == course_id,
+        )
+        .order_by(WrongBookRecord.created_at.desc())
+    )
+    records = result.scalars().all()
+    if not records:
+        raise HTTPException(status_code=400, detail="错题本为空，无需巩固")
+
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course = course_result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    records_data = [
+        {"knowledge_point": r.knowledge_point or "", "question_content": r.question_content}
+        for r in records
+    ]
+    questions_data = await generate_wrong_book_quiz(records_data, course.name)
+    if not questions_data:
+        raise HTTPException(status_code=400, detail="生成巩固练习失败")
+
+    quiz = Quiz(
+        course_id=course_id,
+        title=f"{course.name} 错题巩固",
+        question_count=len(questions_data),
+    )
+    db.add(quiz)
+    await db.flush()
+
+    for q in questions_data:
+        db.add(Question(
+            quiz_id=quiz.id,
+            content=q.get("content", ""),
+            question_type=q.get("type", "short_answer"),
+            options=json.dumps(q.get("options"), ensure_ascii=False) if q.get("options") else None,
+            correct_answer=q.get("answer", ""),
+            knowledge_point=q.get("knowledge_point", ""),
+            difficulty=q.get("difficulty", "medium"),
+        ))
+
+    await db.commit()
+    await db.refresh(quiz)
+    return {"id": quiz.id, "title": quiz.title, "question_count": quiz.question_count}
 
 
 # ─── 抽背 ──────────────────────────────────────────────

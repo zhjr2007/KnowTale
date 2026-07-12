@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}学情分析{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-bar-chart-fill me-2"></i>学情分析报告
+    </h4>
+    <div>
+        <button class="btn btn-outline-primary me-2" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>导出 PDF
+        </button>
+        <button class="btn btn-primary" id="updateRolesBtn" onclick="updateRoles()">
+            <i class="bi bi-arrow-repeat me-1"></i>更新角色
+        </button>
+    </div>
+</div>
+
+<div id="report-loading" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2 text-muted">正在加载学情数据...</p>
+</div>
+
+<div id="report-content" style="display:none;">
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-1">课程名称</h6>
+                    <h5 id="courseName" class="fw-bold"></h5>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-1">报告周期</h6>
+                    <h5 id="reportPeriod" class="fw-bold"></h5>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h2 class="fw-bold text-primary" id="totalMessages">0</h2>
+                    <p class="text-muted mb-0">消息总数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h2 class="fw-bold text-success" id="studentCount">0</h2>
+                    <p class="text-muted mb-0">参与学生数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h2 class="fw-bold text-info" id="aiRatio">0%</h2>
+                    <p class="text-muted mb-0">AI 发言占比</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent border-0">
+            <h5 class="fw-bold mb-0"><i class="bi bi-question-circle me-2"></i>高频问题 TOP10</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-hover mb-0" id="top10Table">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">#</th>
+                        <th>知识点标签</th>
+                        <th style="width:120px;">出现次数</th>
+                    </tr>
+                </thead>
+                <tbody id="top10Body"></tbody>
+            </table>
+            <p id="noTop10" class="text-muted text-center py-3 mb-0" style="display:none;">暂无数据</p>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent border-0">
+            <h5 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle me-2"></i>知识薄弱点分布</h5>
+        </div>
+        <div class="card-body">
+            <div id="weakTagsContainer"></div>
+            <div id="weakAnalysis" class="mt-3 p-3 bg-light rounded"></div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent border-0">
+            <h5 class="fw-bold mb-0"><i class="bi bi-lightbulb me-2"></i>教学优化建议</h5>
+        </div>
+        <div class="card-body">
+            <div id="suggestion" class="p-3 bg-info bg-opacity-10 rounded"></div>
+        </div>
+    </div>
+</div>
+
+<div id="report-empty" style="display:none;">
+    <div class="text-center py-5">
+        <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+        <p class="mt-2 text-muted">暂无学情数据</p>
+        <button class="btn btn-primary" onclick="triggerAnalysis()">
+            <i class="bi bi-play-fill me-1"></i>立即分析
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const courseId = {{ course_id }};
+let reportData = null;
+
+async function loadReport() {
+    document.getElementById('report-loading').style.display = 'block';
+    document.getElementById('report-content').style.display = 'none';
+    document.getElementById('report-empty').style.display = 'none';
+
+    try {
+        const resp = await fetch(`/api/analytics/${courseId}`);
+        if (!resp.ok) throw new Error('加载失败');
+        const data = await resp.json();
+        if (!data || (!data.total_messages && !data.top10?.length)) {
+            document.getElementById('report-loading').style.display = 'none';
+            document.getElementById('report-empty').style.display = 'block';
+            return;
+        }
+        reportData = data;
+        renderReport(data);
+    } catch (err) {
+        document.getElementById('report-loading').style.display = 'none';
+        document.getElementById('report-empty').style.display = 'block';
+    }
+}
+
+function renderReport(data) {
+    document.getElementById('report-loading').style.display = 'none';
+    document.getElementById('report-content').style.display = 'block';
+
+    document.getElementById('courseName').textContent = data.course_name || `课程 #${data.course_id}`;
+    if (data.week_start && data.week_end) {
+        document.getElementById('reportPeriod').textContent = `${data.week_start} ~ ${data.week_end}`;
+    } else {
+        document.getElementById('reportPeriod').textContent = `最近7天（${data.analyzed_at ? new Date(data.analyzed_at).toLocaleDateString() : ''}）`;
+    }
+
+    document.getElementById('totalMessages').textContent = data.total_messages || 0;
+    document.getElementById('studentCount').textContent = data.student_count || 0;
+    document.getElementById('aiRatio').textContent = (data.ai_message_ratio || 0) + '%';
+
+    const top10Body = document.getElementById('top10Body');
+    const noTop10 = document.getElementById('noTop10');
+    top10Body.innerHTML = '';
+    if (data.top10 && data.top10.length > 0) {
+        noTop10.style.display = 'none';
+        data.top10.forEach((item, i) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${i + 1}</td><td>${item.tag}</td><td><span class="badge bg-primary">${item.count} 次</span></td>`;
+            top10Body.appendChild(tr);
+        });
+    } else {
+        noTop10.style.display = 'block';
+    }
+
+    const weakContainer = document.getElementById('weakTagsContainer');
+    if (data.weak_tags && data.weak_tags.length > 0) {
+        weakContainer.innerHTML = data.weak_tags.map(t =>
+            `<span class="badge bg-warning text-dark me-2 mb-2">${t}</span>`
+        ).join('');
+    } else {
+        weakContainer.innerHTML = '<p class="text-muted mb-0">暂未发现明显薄弱点</p>';
+    }
+
+    document.getElementById('weakAnalysis').innerHTML = data.weak_analysis
+        ? `<strong>分析：</strong><br>${data.weak_analysis.replace(/\n/g, '<br>')}`
+        : '';
+
+    document.getElementById('suggestion').innerHTML = data.suggestion
+        ? data.suggestion.replace(/\n/g, '<br>')
+        : '暂无建议';
+}
+
+async function triggerAnalysis() {
+    try {
+        const resp = await fetch(`/api/analytics/${courseId}/trigger`, { method: 'POST' });
+        if (resp.ok) {
+            await loadReport();
+        } else {
+            const err = await resp.json();
+            alert(err.detail || '分析触发失败');
+        }
+    } catch (err) {
+        alert('网络错误');
+    }
+}
+
+async function updateRoles() {
+    const btn = document.getElementById('updateRolesBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>更新中...';
+    try {
+        const resp = await fetch(`/api/analytics/${courseId}/update-roles`, { method: 'POST' });
+        if (resp.ok) {
+            const data = await resp.json();
+            alert('角色更新成功！\n更新角色：' + (data.updated_roles || []).join('、'));
+        } else {
+            const err = await resp.json();
+            alert(err.detail || '角色更新失败');
+        }
+    } catch (err) {
+        alert('网络错误');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>更新角色';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadReport);
+</script>
+{% endblock %}

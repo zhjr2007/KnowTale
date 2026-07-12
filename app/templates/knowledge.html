@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}知识库管理{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程
+    </a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-database me-2"></i>知识库管理</h5>
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                <i class="bi bi-upload me-1"></i>上传新文档
+            </button>
+        </div>
+
+        <div id="kb-stats" class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="p-3 bg-light rounded text-center">
+                    <div class="h4 mb-0 text-primary" id="doc-count">0</div>
+                    <small class="text-muted">文档数</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-light rounded text-center">
+                    <div class="h4 mb-0 text-primary" id="chunk-count">0</div>
+                    <small class="text-muted">总知识片段</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-outline-secondary btn-sm w-100 h-100" id="rebuild-btn" onclick="rebuildKnowledge()">
+                    <i class="bi bi-arrow-repeat me-1"></i>重建索引
+                </button>
+            </div>
+        </div>
+
+        <div id="doc-list" class="list-group">
+            <div class="text-center text-muted py-3">加载中...</div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">上传文档</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="upload-alert"></div>
+                <form id="upload-form">
+                    <div class="mb-3">
+                        <label class="form-label">选择文件（PDF、Word、PPT）</label>
+                        <input type="file" name="file" class="form-control" accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md" required>
+                    </div>
+                    <div class="progress mb-3 d-none" id="upload-progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">正在上传解析...</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">上传并索引</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const courseId = {{ course_id }};
+
+async function loadDocuments() {
+    try {
+        const resp = await fetch(`/api/knowledge/documents/${courseId}`);
+        if (resp.ok) {
+            const docs = await resp.json();
+            const list = document.getElementById('doc-list');
+            const docCount = document.getElementById('doc-count');
+
+            if (docs.length === 0) {
+                list.innerHTML = '<div class="text-center text-muted py-3">暂无文档，点击上方按钮上传</div>';
+                docCount.textContent = '0';
+            } else {
+                docCount.textContent = docs.length;
+                list.innerHTML = docs.map(d => `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-file-text me-2"></i>
+                            <strong>${d.filename}</strong>
+                            <span class="badge bg-light text-secondary ms-2">${d.file_type}</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <small class="text-muted">${d.chunk_count} 片段</small>
+                            <small class="text-muted">${d.uploaded_at ? new Date(d.uploaded_at).toLocaleString() : ''}</small>
+                            <button class="btn btn-outline-danger btn-sm" onclick="deleteDocument(${d.id})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        } else {
+            document.getElementById('doc-list').innerHTML = '<div class="text-center text-danger py-3">加载失败</div>';
+        }
+    } catch (e) {
+        document.getElementById('doc-list').innerHTML = '<div class="text-center text-danger py-3">网络错误</div>';
+    }
+}
+
+async function loadChunkCount() {
+    try {
+        const resp = await fetch(`/api/knowledge/stats/${courseId}`);
+        if (resp.ok) {
+            const data = await resp.json();
+            document.getElementById('chunk-count').textContent = data.chunk_count;
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+async function deleteDocument(docId) {
+    if (!confirm('确定删除该文档？')) return;
+    try {
+        const resp = await fetch(`/api/knowledge/documents/${courseId}/${docId}`, { method: 'DELETE' });
+        if (resp.ok) {
+            loadDocuments();
+            loadChunkCount();
+        } else {
+            alert('删除失败');
+        }
+    } catch (e) {
+        alert('网络错误');
+    }
+}
+
+const uploadForm = document.getElementById('upload-form');
+if (uploadForm) {
+    uploadForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const form = new FormData(this);
+        const progress = document.getElementById('upload-progress');
+        progress.classList.remove('d-none');
+        document.getElementById('upload-alert').innerHTML = '';
+
+        try {
+            const resp = await fetch(`/api/knowledge/upload/${courseId}`, { method: 'POST', body: form });
+            progress.classList.add('d-none');
+            if (resp.ok) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+                modal.hide();
+                this.reset();
+                loadDocuments();
+                loadChunkCount();
+            } else {
+                const err = await resp.json();
+                document.getElementById('upload-alert').innerHTML = `<div class="alert alert-danger">${err.detail || '上传失败'}</div>`;
+            }
+        } catch (e) {
+            progress.classList.add('d-none');
+            document.getElementById('upload-alert').innerHTML = '<div class="alert alert-danger">网络错误</div>';
+        }
+    });
+}
+
+async function rebuildKnowledge() {
+    if (!confirm('确定重建知识库索引？所有文档将重新解析和索引。')) return;
+    const btn = document.getElementById('rebuild-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>重建中...';
+    try {
+        const resp = await fetch(`/api/knowledge/rebuild/${courseId}`, { method: 'POST' });
+        if (resp.ok) {
+            loadDocuments();
+            loadChunkCount();
+            alert('知识库重建完成');
+        } else {
+            alert('重建失败');
+        }
+    } catch (e) {
+        alert('网络错误');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>重建索引';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadDocuments();
+    loadChunkCount();
+});
+</script>
+{% endblock %}

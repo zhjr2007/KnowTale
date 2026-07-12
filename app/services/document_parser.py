@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from pathlib import Path
 
 import httpx
 import fitz
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def parse_with_mineru(file_path: str | Path) -> str:
@@ -80,8 +83,11 @@ async def parse_document(file_path: str | Path) -> str:
 
     if settings.MINERU_URL:
         try:
-            return await parse_with_mineru(file_path)
+            content = await parse_with_mineru(file_path)
+            return content
         except Exception as e:
-            pass
+            logger.warning("MinerU 解析失败 (%s)，降级到基础解析模式: %s", file_path.name, e)
 
-    return await parse_with_fallback(file_path)
+    logger.info("使用基础解析模式: %s", file_path.name)
+    content = await parse_with_fallback(file_path)
+    return f"【解析模式：基础解析】\n\n{content}"

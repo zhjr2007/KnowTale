@@ -26,6 +26,11 @@
             <i class="bi bi-book me-1"></i>知识库
         </button>
     </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="apps-tab" data-bs-toggle="tab" data-bs-target="#applications" type="button">
+            <i class="bi bi-person-plus me-1"></i>入班审核
+        </button>
+    </li>
     {% endif %}
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="tools-tab" data-bs-toggle="tab" data-bs-target="#tools" type="button">
@@ -102,6 +107,22 @@
                             <button type="submit" class="btn btn-primary w-100">上传并索引</button>
                         </form>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="applications">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-person-plus me-2"></i>入班申请</h6>
+                    <a href="/courses/{{ course_id }}/applications" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>查看全部
+                    </a>
+                </div>
+                <div id="application-list">
+                    <div class="text-center text-muted py-3">加载中...</div>
                 </div>
             </div>
         </div>
@@ -204,9 +225,71 @@ async function loadKnowledge() {
     }
 }
 
+async function loadApplications() {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/applications`);
+        if (resp.ok) {
+            const apps = await resp.json();
+            const container = document.getElementById('application-list');
+            if (apps.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted py-3">暂无待审批的申请</div>';
+            } else {
+                container.innerHTML = apps.map(a => `
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <div>
+                            <strong>${a.student_name}</strong>
+                            <small class="text-muted ms-2">@${a.student_username}</small>
+                            <br><small class="text-muted">申请于 ${new Date(a.applied_at).toLocaleString()}</small>
+                        </div>
+                        <div>
+                            <button class="btn btn-success btn-sm me-1" onclick="approveApp(${a.id})">
+                                <i class="bi bi-check-lg"></i>批准
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="rejectApp(${a.id})">
+                                <i class="bi bi-x-lg"></i>拒绝
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (e) {
+        document.getElementById('application-list').innerHTML = '<div class="text-center text-muted py-3">加载失败</div>';
+    }
+}
+
+async function approveApp(enrollmentId) {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/applications/${enrollmentId}/approve`, { method: 'POST' });
+        if (resp.ok) {
+            loadApplications();
+        } else {
+            const err = await resp.json();
+            alert(err.detail || '操作失败');
+        }
+    } catch (e) {
+        alert('网络错误');
+    }
+}
+
+async function rejectApp(enrollmentId) {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/applications/${enrollmentId}/reject`, { method: 'POST' });
+        if (resp.ok) {
+            loadApplications();
+        } else {
+            const err = await resp.json();
+            alert(err.detail || '操作失败');
+        }
+    } catch (e) {
+        alert('网络错误');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadCourse();
     loadKnowledge();
+    loadApplications();
 });
 
 const uploadForm = document.getElementById('upload-form');

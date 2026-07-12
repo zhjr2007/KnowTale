@@ -20,6 +20,7 @@ async def init_db():
     from app.models.course import Course, CourseEnrollment
     from app.models.knowledge import KnowledgeDocument
     from app.models.quiz import Quiz, Question, QuizAttempt, Answer, WrongBookRecord
+    from app.models.conversation import Conversation, WeeklyReport
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
