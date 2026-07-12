@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}入班审核{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程详情
+    </a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-person-plus me-2"></i>入班审核</h5>
+            <button class="btn btn-outline-primary btn-sm" onclick="loadApplications()">
+                <i class="bi bi-arrow-clockwise me-1"></i>刷新
+            </button>
+        </div>
+        <div id="application-list">
+            <div class="text-center text-muted py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2">加载申请列表...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const courseId = {{ course_id }};
+
+async function loadApplications() {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/applications`);
+        if (resp.ok) {
+            const apps = await resp.json();
+            const container = document.getElementById('application-list');
+            if (apps.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                        <p class="mt-2">暂无待审批的申请</p>
+                    </div>`;
+            } else {
+                container.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>学生姓名</th>
+                                    <th>用户名</th>
+                                    <th>申请时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${apps.map(a => `
+                                    <tr>
+                                        <td><strong>${a.student_name}</strong></td>
+                                        <td>@${a.student_username}</td>
+                                        <td><small class="text-muted">${new Date(a.applied_at).toLocaleString()}</small></td>
+                                        <td>
+                                            <button class="btn btn-success btn-sm me-1" onclick="approveApp(${a.id})">
+                                                <i class="bi bi-check-lg"></i>批准
+                                            </button>
+                                            <button class="btn btn-danger btn-sm" onclick="rejectApp(${a.id})">
+                                                <i class="bi bi-x-lg"></i>拒绝
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            }
+        } else {
+            document.getElementById('application-list').innerHTML = '<div class="text-center text-muted py-5">加载失败</div>';
+        }
+    } catch (e) {
+        document.getElementById('application-list').innerHTML = '<div class="text-center text-muted py-5">网络错误</div>';
+    }
+}
+
+async function approveApp(enrollmentId) {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/applications/${enrollmentId}/approve`, { method: 'POST' });
+        if (resp.ok) {
+            loadApplications();
+        } else {
+            const err = await resp.json();
+            alert(err.detail || '操作失败');
+        }
+    } catch (e) {
+        alert('网络错误');
+    }
+}
+
+async function rejectApp(enrollmentId) {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/applications/${enrollmentId}/reject`, { method: 'POST' });
+        if (resp.ok) {
+            loadApplications();
+        } else {
+            const err = await resp.json();
+            alert(err.detail || '操作失败');
+        }
+    } catch (e) {
+        alert('网络错误');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadApplications);
+</script>
+{% endblock %}

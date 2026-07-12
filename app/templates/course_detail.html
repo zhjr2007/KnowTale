@@ -34,7 +34,7 @@
     {% endif %}
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="tools-tab" data-bs-toggle="tab" data-bs-target="#tools" type="button">
-            <i class="bi bi-tools me-1"></i>学习工具
+            <i class="bi bi-tools me-1"></i>{% if user.role == 'teacher' %}课程管理{% else %}学习工具{% endif %}
         </button>
     </li>
 </ul>
@@ -210,6 +210,21 @@ async function loadCourse() {
         }
     } catch (e) {
         document.getElementById('course-info').innerHTML = `<div class="alert alert-danger">加载失败</div>`;
+    }
+}
+
+async function refreshInviteCode() {
+    try {
+        const resp = await fetch(`/api/courses/${courseId}/invite-code/refresh`, { method: 'POST' });
+        if (resp.ok) {
+            const data = await resp.json();
+            document.getElementById('invite-code').textContent = data.invite_code;
+        } else {
+            const err = await resp.json();
+            alert(err.detail || '刷新失败');
+        }
+    } catch (e) {
+        alert('网络错误');
     }
 }
 
