@@ -11,6 +11,7 @@ class Course(Base):
     name = Column(String(200), index=True, nullable=False)
     description = Column(Text, nullable=True)
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    invite_code = Column(String(6), unique=True, index=True, nullable=True)
 
     knowledge_base_id = Column(String(100), nullable=True)
 
