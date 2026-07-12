@@ -14,6 +14,7 @@ class Course(Base):
     invite_code = Column(String(6), unique=True, index=True, nullable=True)
 
     knowledge_base_id = Column(String(100), nullable=True)
+    status = Column(String(20), nullable=False, default="active")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
