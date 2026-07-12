@@ -14,6 +14,9 @@ class Course(Base):
 
     knowledge_base_id = Column(String(100), nullable=True)
 
+    teacher_role_card = Column(Text, nullable=True)
+    student_roles_config = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
