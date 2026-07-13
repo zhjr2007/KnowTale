@@ -1,12 +1,30 @@
 {% extends "base.html" %}
 {% block title %}学情分析{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+@media print {
+    .no-print { display: none !important; }
+    .card { break-inside: avoid; box-shadow: none !important; border: 1px solid #dee2e6 !important; }
+    body { font-size: 12pt; }
+    canvas { max-height: 250px; }
+}
+.chart-container { position: relative; height: 250px; }
+.weak-point-card { border-left: 4px solid #dc3545; }
+.student-selector { max-width: 300px; }
+.low-participation-card { border-left: 4px solid #dc3545; background: #fff5f5; }
+</style>
+{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 no-print">
     <h4 class="fw-bold mb-0">
         <i class="bi bi-bar-chart-fill me-2"></i>学情分析报告
     </h4>
-    <div>
-        <button class="btn btn-outline-primary me-2" onclick="window.print()">
+    <div class="d-flex gap-2 align-items-center">
+        <select id="studentSelector" class="form-select student-selector" style="display:none;" onchange="switchStudent(this.value)">
+            <option value="">-- 班级概览 --</option>
+        </select>
+        <button class="btn btn-outline-primary" onclick="window.print()">
             <i class="bi bi-printer me-1"></i>导出 PDF
         </button>
         <button class="btn btn-primary" id="updateRolesBtn" onclick="updateRoles()">
@@ -18,6 +36,61 @@
 <div id="report-loading" class="text-center py-5">
     <div class="spinner-border text-primary" role="status"></div>
     <p class="mt-2 text-muted">正在加载学情数据...</p>
+</div>
+
+<div id="skeleton-analytics">
+    <div class="row g-4 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <div class="skeleton" style="height: 48px; width: 60px; margin: 0 auto 8px;"></div>
+                    <div class="skeleton" style="height: 16px; width: 80px; margin: 0 auto;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <div class="skeleton" style="height: 48px; width: 60px; margin: 0 auto 8px;"></div>
+                    <div class="skeleton" style="height: 16px; width: 80px; margin: 0 auto;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <div class="skeleton" style="height: 48px; width: 60px; margin: 0 auto 8px;"></div>
+                    <div class="skeleton" style="height: 16px; width: 80px; margin: 0 auto;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <div class="skeleton" style="height: 48px; width: 60px; margin: 0 auto 8px;"></div>
+                    <div class="skeleton" style="height: 16px; width: 80px; margin: 0 auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row g-4 mb-4">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body" style="height: 250px;">
+                    <div class="skeleton" style="height: 24px; width: 160px; margin-bottom: 16px;"></div>
+                    <div class="skeleton" style="height: 200px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body" style="height: 250px;">
+                    <div class="skeleton" style="height: 24px; width: 120px; margin-bottom: 16px;"></div>
+                    <div class="skeleton" style="height: 180px; width: 180px; margin: 0 auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="report-content" style="display:none;">
@@ -36,8 +109,8 @@
         </div>
     </div>
 
-    <div class="row g-4 mb-4">
-        <div class="col-md-4">
+    <div class="row g-4 mb-4" id="statsCards">
+        <div class="col-md-3">
             <div class="card border-0 shadow-sm text-center h-100">
                 <div class="card-body">
                     <h2 class="fw-bold text-primary" id="totalMessages">0</h2>
@@ -45,7 +118,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-0 shadow-sm text-center h-100">
                 <div class="card-body">
                     <h2 class="fw-bold text-success" id="studentCount">0</h2>
@@ -53,7 +126,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-0 shadow-sm text-center h-100">
                 <div class="card-body">
                     <h2 class="fw-bold text-info" id="aiRatio">0%</h2>
@@ -61,34 +134,109 @@
                 </div>
             </div>
         </div>
-    </div>
-
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-transparent border-0">
-            <h5 class="fw-bold mb-0"><i class="bi bi-question-circle me-2"></i>高频问题 TOP10</h5>
-        </div>
-        <div class="card-body">
-            <table class="table table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th style="width:60px;">#</th>
-                        <th>知识点标签</th>
-                        <th style="width:120px;">出现次数</th>
-                    </tr>
-                </thead>
-                <tbody id="top10Body"></tbody>
-            </table>
-            <p id="noTop10" class="text-muted text-center py-3 mb-0" style="display:none;">暂无数据</p>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h2 class="fw-bold text-warning" id="weakTagCount">0</h2>
+                    <p class="text-muted mb-0">薄弱知识点</p>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-transparent border-0">
-            <h5 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle me-2"></i>知识薄弱点分布</h5>
+    <div class="row g-4 mb-4" id="studentStatsCards" style="display:none;">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h2 class="fw-bold text-primary" id="sTotalMessages">0</h2>
+                    <p class="text-muted mb-0">消息总数</p>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <div id="weakTagsContainer"></div>
-            <div id="weakAnalysis" class="mt-3 p-3 bg-light rounded"></div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h2 class="fw-bold text-success" id="sActiveDays">0</h2>
+                    <p class="text-muted mb-0">活跃天数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h2 class="fw-bold text-info" id="sAvgScore">0%</h2>
+                    <p class="text-muted mb-0">答题平均分</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-graph-up me-2"></i>参与度趋势</h5>
+                </div>
+                <div class="card-body chart-container">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-pie-chart me-2"></i>AI 参与比例</h5>
+                </div>
+                <div class="card-body chart-container">
+                    <canvas id="aiRatioChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-bar-chart me-2"></i>知识点活动 TOP10</h5>
+                </div>
+                <div class="card-body chart-container">
+                    <canvas id="top10Chart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-radar me-2"></i>知识点掌握雷达</h5>
+                </div>
+                <div class="card-body chart-container">
+                    <canvas id="radarChart"></canvas>
+                    <p id="radarEmpty" class="text-muted text-center pt-4" style="display:none;">暂无数据</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="weakPointsSection" class="mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle me-2"></i>薄弱知识点</h5>
+            </div>
+            <div class="card-body">
+                <div id="weakTagsContainer" class="mb-3"></div>
+                <div id="weakPointCards" class="row g-3"></div>
+                <div id="weakAnalysis" class="mt-3 p-3 bg-light rounded"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="lowParticipationSection" class="mb-4 no-print" style="display:none;">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="fw-bold mb-0 text-danger"><i class="bi bi-exclamation-circle me-2"></i>需要关注的学生</h5>
+            </div>
+            <div class="card-body" id="lowParticipationBody"></div>
         </div>
     </div>
 
@@ -98,6 +246,17 @@
         </div>
         <div class="card-body">
             <div id="suggestion" class="p-3 bg-info bg-opacity-10 rounded"></div>
+        </div>
+    </div>
+
+    <div id="recommendationsSection" class="mb-4" style="display:none;">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-robot me-2"></i>AI 个性化学习建议</h5>
+            </div>
+            <div class="card-body">
+                <div id="recommendationsText" class="p-3 bg-success bg-opacity-10 rounded"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -116,9 +275,13 @@
 {% block extra_scripts %}
 <script>
 const courseId = {{ course_id }};
+const userRole = '{{ user.role }}';
+let trendChart = null, aiRatioChart = null, top10Chart = null, radarChart = null;
+let currentView = 'class';
 
 async function loadReport() {
     document.getElementById('report-loading').style.display = 'block';
+    document.getElementById('skeleton-analytics').style.display = 'none';
     document.getElementById('report-content').style.display = 'none';
     document.getElementById('report-empty').style.display = 'none';
 
@@ -132,73 +295,285 @@ async function loadReport() {
             return;
         }
         document.getElementById('report-loading').style.display = 'none';
+        document.getElementById('skeleton-analytics').style.display = 'none';
         document.getElementById('report-content').style.display = 'block';
 
         document.getElementById('courseName').textContent = data.course_name || ('课程 #' + data.course_id);
-        if (data.week_start && data.week_end) {
-            document.getElementById('reportPeriod').textContent = data.week_start + ' ~ ' + data.week_end;
-        } else {
-            document.getElementById('reportPeriod').textContent = '最近7天';
-        }
+        document.getElementById('reportPeriod').textContent = (data.week_start && data.week_end) ? data.week_start + ' ~ ' + data.week_end : '最近7天';
         document.getElementById('totalMessages').textContent = data.total_messages || 0;
         document.getElementById('studentCount').textContent = data.student_count || 0;
         document.getElementById('aiRatio').textContent = (data.ai_message_ratio || 0) + '%';
+        document.getElementById('weakTagCount').textContent = (data.weak_tags && data.weak_tags.length) || 0;
 
-        const tb = document.getElementById('top10Body');
-        tb.innerHTML = '';
-        if (data.top10 && data.top10.length) {
-            document.getElementById('noTop10').style.display = 'none';
-            data.top10.forEach(function(item, i) {
-                tb.innerHTML += '<tr><td>' + (i + 1) + '</td><td>' + item.tag + '</td><td><span class="badge bg-primary">' + item.count + ' 次</span></td></tr>';
-            });
-        } else {
-            document.getElementById('noTop10').style.display = 'block';
-        }
-
-        const wc = document.getElementById('weakTagsContainer');
-        if (data.weak_tags && data.weak_tags.length) {
-            wc.innerHTML = data.weak_tags.map(function(t) { return '<span class="badge bg-warning text-dark me-2 mb-2">' + t + '</span>'; }).join('');
-        } else {
-            wc.innerHTML = '<p class="text-muted mb-0">暂未发现明显薄弱点</p>';
-        }
-        document.getElementById('weakAnalysis').innerHTML = data.weak_analysis ? '<strong>分析：</strong><br>' + data.weak_analysis.replace(/\n/g, '<br>') : '';
+        renderTrendChart(data.trend);
+        renderAiRatioChart(data.participation_distribution);
+        renderTop10Chart(data.top10);
+        renderWeakPoints(data.weak_tags, data.weak_analysis);
         document.getElementById('suggestion').innerHTML = data.suggestion ? data.suggestion.replace(/\n/g, '<br>') : '暂无建议';
+
+        if (userRole === 'teacher') {
+            loadStudentSelector();
+            loadLowParticipation();
+        }
     } catch (err) {
         document.getElementById('report-loading').style.display = 'none';
         document.getElementById('report-empty').style.display = 'block';
     }
 }
 
+function renderTrendChart(trend) {
+    if (trendChart) trendChart.destroy();
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    if (!trend || !trend.length) {
+        ctx.canvas.parentNode.innerHTML = '<p class="text-muted text-center pt-4">暂无趋势数据</p>';
+        return;
+    }
+    trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: trend.map(t => t.date),
+            datasets: [{
+                label: '消息数',
+                data: trend.map(t => t.count),
+                borderColor: '#1a56db',
+                backgroundColor: 'rgba(26,86,219,0.1)',
+                fill: true,
+                tension: 0.3,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+}
+
+function renderAiRatioChart(distribution) {
+    if (aiRatioChart) aiRatioChart.destroy();
+    const ctx = document.getElementById('aiRatioChart').getContext('2d');
+    if (!distribution || !Object.keys(distribution).length) {
+        ctx.canvas.parentNode.innerHTML = '<p class="text-muted text-center pt-4">暂无数据</p>';
+        return;
+    }
+    const labels = {'ai_teacher': 'AI 教师', 'ai_student': 'AI 学生', 'student': '真人学生'};
+    const colors = {'ai_teacher': '#f59e0b', 'ai_student': '#3b82f6', 'student': '#10b981'};
+    const entries = Object.entries(distribution);
+    aiRatioChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: entries.map(([k]) => labels[k] || k),
+            datasets: [{
+                data: entries.map(([,v]) => v),
+                backgroundColor: entries.map(([k]) => colors[k] || '#6b7280'),
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } }
+            }
+        }
+    });
+}
+
+function renderTop10Chart(top10) {
+    if (top10Chart) top10Chart.destroy();
+    const ctx = document.getElementById('top10Chart').getContext('2d');
+    if (!top10 || !top10.length) {
+        ctx.canvas.parentNode.innerHTML = '<p class="text-muted text-center pt-4">暂无数据</p>';
+        return;
+    }
+    const reversed = [...top10].reverse();
+    top10Chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: reversed.map(t => t.tag),
+            datasets: [{
+                label: '出现次数',
+                data: reversed.map(t => t.count),
+                backgroundColor: 'rgba(26,86,219,0.7)',
+                borderColor: '#1a56db',
+                borderWidth: 1,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+}
+
+function renderRadarChart(knowledgeRadar) {
+    if (radarChart) radarChart.destroy();
+    const ctx = document.getElementById('radarChart').getContext('2d');
+    const empty = document.getElementById('radarEmpty');
+    if (!knowledgeRadar || !knowledgeRadar.length) {
+        ctx.canvas.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+    }
+    ctx.canvas.style.display = 'block';
+    empty.style.display = 'none';
+    radarChart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: knowledgeRadar.map(r => r.point),
+            datasets: [{
+                label: '掌握度',
+                data: knowledgeRadar.map(r => r.mastery),
+                backgroundColor: 'rgba(26,86,219,0.2)',
+                borderColor: '#1a56db',
+                pointBackgroundColor: '#1a56db',
+                pointBorderColor: '#fff',
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { stepSize: 20 }
+                }
+            }
+        }
+    });
+}
+
+function renderWeakPoints(weakTags, weakAnalysis) {
+    const container = document.getElementById('weakTagsContainer');
+    if (weakTags && weakTags.length) {
+        container.innerHTML = weakTags.map(function(t) {
+            return '<span class="badge bg-warning text-dark me-2 mb-2">' + t + '</span>';
+        }).join('');
+    } else {
+        container.innerHTML = '<p class="text-muted mb-0">暂未发现明显薄弱点</p>';
+    }
+    document.getElementById('weakAnalysis').innerHTML = weakAnalysis ? '<strong>分析：</strong><br>' + weakAnalysis.replace(/\n/g, '<br>') : '';
+}
+
+async function loadStudentSelector() {
+    try {
+        const resp = await fetch('/api/courses/' + courseId + '/members');
+        if (!resp.ok) return;
+        const students = await resp.json();
+        const sel = document.getElementById('studentSelector');
+        sel.style.display = 'inline-block';
+        sel.innerHTML = '<option value="">-- 班级概览 --</option>';
+        students.forEach(function(s) {
+            sel.innerHTML += '<option value="' + s.id + '">' + (s.display_name || s.username) + '</option>';
+        });
+    } catch (e) {}
+}
+
+async function switchStudent(studentId) {
+    if (!studentId) {
+        currentView = 'class';
+        document.getElementById('studentStatsCards').style.display = 'none';
+        document.getElementById('statsCards').style.display = '';
+        document.getElementById('recommendationsSection').style.display = 'none';
+        document.getElementById('weakPointsSection').style.display = '';
+        document.getElementById('lowParticipationSection').style.display = '';
+        loadReport();
+        return;
+    }
+
+    currentView = 'student';
+    document.getElementById('report-loading').style.display = 'block';
+
+    try {
+        const resp = await fetch('/api/analytics/' + courseId + '/student/' + studentId);
+        if (!resp.ok) throw new Error('加载失败');
+        const data = await resp.json();
+
+        document.getElementById('report-loading').style.display = 'none';
+
+        document.getElementById('statsCards').style.display = 'none';
+        document.getElementById('studentStatsCards').style.display = '';
+        document.getElementById('recommendationsSection').style.display = '';
+        document.getElementById('weakPointsSection').style.display = 'none';
+        document.getElementById('lowParticipationSection').style.display = 'none';
+
+        document.getElementById('sTotalMessages').textContent = data.participation.total_messages;
+        document.getElementById('sActiveDays').textContent = data.participation.active_days;
+        document.getElementById('sAvgScore').textContent = data.quiz.avg_score + '%';
+
+        document.getElementById('courseName').textContent = data.student_name + ' - 个人学情报告';
+        document.getElementById('reportPeriod').textContent = data.participation.last_active_at ? '最近活跃: ' + data.participation.last_active_at.slice(0, 10) : '暂无活跃记录';
+
+        renderRadarChart(data.knowledge_radar);
+        renderStudentWeakPoints(data.quiz.weak_points);
+        document.getElementById('recommendationsText').innerHTML = data.recommendations ? data.recommendations.replace(/\n/g, '<br>') : '暂无建议';
+    } catch (err) {
+        document.getElementById('report-loading').style.display = 'none';
+    }
+}
+
+function renderStudentWeakPoints(weakPoints) {
+    const container = document.getElementById('weakPointCards');
+    if (!weakPoints || !weakPoints.length) {
+        container.innerHTML = '<div class="col-12"><p class="text-muted mb-0">暂无明显薄弱点</p></div>';
+        return;
+    }
+    container.innerHTML = weakPoints.map(function(w) {
+        return '<div class="col-md-4"><div class="card weak-point-card h-100"><div class="card-body"><h6 class="fw-bold text-danger">' + w.point + '</h6><p class="mb-0 text-muted">正确率: ' + w.accuracy + '%</p></div></div></div>';
+    }).join('');
+}
+
+async function loadLowParticipation() {
+    try {
+        const resp = await fetch('/api/analytics/' + courseId + '/low-participation');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const section = document.getElementById('lowParticipationSection');
+        const body = document.getElementById('lowParticipationBody');
+
+        if (!data.students || !data.students.length) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = '';
+        body.innerHTML = '<div class="row g-3">' + data.students.map(function(s) {
+            return '<div class="col-md-4"><div class="card low-participation-card h-100"><div class="card-body"><div class="d-flex align-items-center mb-2"><div class="rounded-circle bg-danger text-white d-flex align-items-center justify-content-center me-2" style="width:36px;height:36px;font-weight:bold;">' + (s.display_name.charAt(0) || '?') + '</div><div><h6 class="fw-bold mb-0">' + s.display_name + '</h6><small class="text-muted">@' + s.username + '</small></div></div><p class="mb-1 small">最近7天消息: <strong>' + s.message_count_7d + '</strong></p><p class="mb-1 small">最近7天答题: <strong>' + s.quiz_count_7d + '</strong></p><p class="mb-0 small text-muted">最后活跃: ' + (s.last_active_at ? s.last_active_at.slice(0, 10) : '从未') + '</p></div></div></div>';
+        }).join('') + '</div>';
+    } catch (e) {}
+}
+
 async function triggerAnalysis() {
     try {
         const resp = await fetch('/api/analytics/' + courseId + '/trigger', { method: 'POST' });
         if (resp.ok) {
-            loadReport();
+            location.reload();
         } else {
-            alert('分析触发失败');
+            showToast('分析触发失败', 'danger');
         }
     } catch (err) {
-        alert('网络错误');
+        showToast('网络错误', 'danger');
     }
 }
 
 async function updateRoles() {
     const btn = document.getElementById('updateRolesBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>更新中...';
+    setLoading(btn);
     try {
         const resp = await fetch('/api/analytics/' + courseId + '/update-roles', { method: 'POST' });
         if (resp.ok) {
             const data = await resp.json();
-            alert('角色更新成功！更新角色：' + (data.updated_roles || []).join('、'));
+            showToast('角色更新成功！更新角色：' + (data.updated_roles || []).join('、'), 'success');
         } else {
-            alert('角色更新失败');
+            showToast('角色更新失败', 'danger');
         }
     } catch (err) {
-        alert('网络错误');
+        showToast('网络错误', 'danger');
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>更新角色';
+        setLoading(btn, false);
     }
 }
 

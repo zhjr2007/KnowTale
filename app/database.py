@@ -21,6 +21,8 @@ async def init_db():
     from app.models.knowledge import KnowledgeDocument
     from app.models.quiz import Quiz, Question, QuizAttempt, Answer, WrongBookRecord
     from app.models.conversation import Conversation, WeeklyReport
+    from app.models.notification import Notification
+    from app.models.study_plan import StudyPlan, StudyPlanItem
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

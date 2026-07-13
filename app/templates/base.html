@@ -16,9 +16,14 @@
                 <i class="bi bi-mortarboard-fill me-2"></i>知喻
             </a>
             {% if user %}
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-outline-light btn-sm" onclick="toggleDarkMode()" title="切换暗色模式">
+                    <i class="bi bi-sun-fill" id="darkModeIcon"></i>
+                </button>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-center">
                     <li class="nav-item">
@@ -29,6 +34,18 @@
                                 {% if user.role == 'teacher' %}老师{% else %}学生{% endif %}
                             </span>
                         </span>
+                    </li>
+                    <li class="nav-item dropdown position-relative me-2">
+                        <a class="nav-link" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-bell" style="font-size:1.2rem;"></i>
+                            <span id="unreadBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:0.6rem;display:none;">0</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end notification-dropdown" id="notificationPreview" style="width:320px;max-height:400px;overflow-y:auto;">
+                            <li><h6 class="dropdown-header">最近通知</h6></li>
+                            <li><div class="text-center text-muted small py-2" id="previewLoading">加载中...</div></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-center text-primary" href="/notifications">查看全部</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <form method="post" action="/api/auth/logout" class="d-inline">
@@ -43,11 +60,66 @@
         </div>
     </nav>
 
-    <main class="container py-4">
+    <main class="container py-4 page-transition">
         {% block content %}{% endblock %}
     </main>
 
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 9999;"></div>
+
     <script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script>
+    function timeAgo(dateStr) {
+        const now = new Date();
+        const d = new Date(dateStr);
+        const diff = Math.floor((now - d) / 1000);
+        if (diff < 60) return '刚刚';
+        if (diff < 3600) return Math.floor(diff / 60) + '分钟前';
+        if (diff < 86400) return Math.floor(diff / 3600) + '小时前';
+        if (diff < 2592000) return Math.floor(diff / 86400) + '天前';
+        return d.toLocaleDateString('zh-CN');
+    }
+
+    async function loadNotificationPreview() {
+        try {
+            const resp = await fetch('/api/notifications?page=1&page_size=5&unread_only=true');
+            const data = await resp.json();
+            const container = document.getElementById('notificationPreview');
+            const header = container.querySelector('.dropdown-header');
+            const divider = container.querySelector('.dropdown-divider');
+            const viewAll = container.querySelector('a[href="/notifications"]');
+            container.innerHTML = '';
+            container.appendChild(header);
+            if (data.notifications.length === 0) {
+                const empty = document.createElement('li');
+                empty.innerHTML = '<div class="text-center text-muted small py-2">暂无未读通知</div>';
+                container.appendChild(empty);
+            } else {
+                data.notifications.forEach(n => {
+                    const item = document.createElement('li');
+                    const a = document.createElement('a');
+                    a.className = 'dropdown-item';
+                    a.href = n.course_id ? '/courses/' + n.course_id : '#';
+                    a.innerHTML = '<div class="d-flex justify-content-between"><span class="small fw-bold">' + n.title + '</span><small class="text-muted">' + timeAgo(n.created_at) + '</small></div>';
+                    item.appendChild(a);
+                    container.appendChild(item);
+                });
+            }
+            container.appendChild(divider);
+            container.appendChild(viewAll);
+            const badge = document.getElementById('unreadBadge');
+            if (badge && data.unread_count > 0) {
+                badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                badge.style.display = 'inline';
+            } else if (badge) {
+                badge.style.display = 'none';
+            }
+        } catch (e) {}
+    }
+
+    loadNotificationPreview();
+    setInterval(loadNotificationPreview, 30000);
+    </script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

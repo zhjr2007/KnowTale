@@ -11,8 +11,6 @@
                     <p class="text-muted small">多智能体协同课后学习平台</p>
                 </div>
 
-                <div id="alert-area"></div>
-
                 <form id="login-form">
                     <div class="mb-3">
                         <label class="form-label">用户名</label>
@@ -41,6 +39,8 @@
 <script>
 document.getElementById('login-form').addEventListener('submit', async function(e) {
     e.preventDefault();
+    const btn = this.querySelector('button[type=submit]');
+    setLoading(btn);
     const form = new FormData(this);
     const data = {
         username: form.get('username'),
@@ -56,16 +56,13 @@ document.getElementById('login-form').addEventListener('submit', async function(
             window.location.href = resp.url;
         } else if (!resp.ok) {
             const err = await resp.json();
-            showAlert(err.detail || '登录失败', 'danger');
+            showToast(err.detail || '登录失败', 'danger');
         }
     } catch (err) {
-        showAlert('网络错误，请重试', 'danger');
+        showToast('网络错误，请重试', 'danger');
+    } finally {
+        setLoading(btn, false);
     }
 });
-
-function showAlert(msg, type) {
-    const area = document.getElementById('alert-area');
-    area.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show">${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
-}
 </script>
 {% endblock %}

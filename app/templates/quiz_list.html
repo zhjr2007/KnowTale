@@ -9,56 +9,89 @@
 
 <h5 class="fw-bold mb-3"><i class="bi bi-question-circle me-2"></i>题库练习</h5>
 
-{% if user.role == 'teacher' %}
-<div class="card shadow-sm border-0 mb-4">
-    <div class="card-body">
-        <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-2"></i>生成新练习</h6>
-        <form id="generate-form">
-            <div class="row g-2 mb-2">
-                <div class="col-md-4">
-                    <input type="text" name="title" class="form-control" placeholder="练习标题" value="{{ course_name }} 练习">
-                </div>
-                <div class="col-md-3">
-                    <select name="num_questions" class="form-select">
-                        <option value="5">5 题</option>
-                        <option value="10">10 题</option>
-                        <option value="15">15 题</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <select name="difficulty" class="form-select">
-                        <option value="mixed">混合难度</option>
-                        <option value="easy">简单</option>
-                        <option value="medium">中等</option>
-                        <option value="hard">困难</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-magic me-1"></i>生成
-                    </button>
+<ul class="nav nav-tabs mb-3" id="quizTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="list-tab" data-bs-toggle="tab" data-bs-target="#quiz-list-panel" type="button">
+            <i class="bi bi-list me-1"></i>练习列表
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats-panel" type="button">
+            <i class="bi bi-bar-chart me-1"></i>统计分析
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="quiz-list-panel">
+        {% if user.role == 'teacher' %}
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-2"></i>生成新练习</h6>
+                <form id="generate-form">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4">
+                            <input type="text" name="title" class="form-control" placeholder="练习标题" value="{{ course_name }} 练习">
+                        </div>
+                        <div class="col-md-3">
+                            <select name="num_questions" class="form-select">
+                                <option value="5">5 题</option>
+                                <option value="10">10 题</option>
+                                <option value="15">15 题</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select name="difficulty" class="form-select">
+                                <option value="mixed">混合难度</option>
+                                <option value="easy">简单</option>
+                                <option value="medium">中等</option>
+                                <option value="hard">困难</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-magic me-1"></i>生成
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div id="skeleton-quizzes">
+            {% for i in range(4) %}
+            <div class="card shadow-sm border-0 mb-2">
+                <div class="card-body">
+                    <div class="skeleton" style="height: 20px; width: 60%; margin-bottom: 8px;"></div>
+                    <div class="skeleton" style="height: 14px; width: 40%;"></div>
                 </div>
             </div>
-        </form>
-        <div id="gen-alert"></div>
+            {% endfor %}
+        </div>
+        <div id="quiz-list" style="display:none;"></div>
     </div>
-</div>
-{% endif %}
 
-<div id="quiz-list">
-    <div class="text-center py-4 text-muted">
-        <div class="spinner-border spinner-border-sm me-1"></div>加载练习列表...
+    <div class="tab-pane fade" id="stats-panel">
+        <div id="stats-content">
+            <div class="text-center py-4 text-muted">
+                <div class="spinner-border spinner-border-sm me-1"></div>加载统计数据...
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 async function loadQuizzes() {
     try {
         const resp = await fetch('/api/quiz/list/{{ course_id }}');
         const quizzes = await resp.json();
+        document.getElementById('skeleton-quizzes').style.display = 'none';
         const container = document.getElementById('quiz-list');
+        container.style.display = '';
         if (quizzes.length === 0) {
             container.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox" style="font-size:2rem"></i><p class="mt-2">暂无练习</p></div>';
             return;
@@ -96,8 +129,7 @@ if (genForm) {
             difficulty: form.get('difficulty'),
         };
         const btn = this.querySelector('button');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>生成中...';
+        setLoading(btn);
 
         try {
             const resp = await fetch('/api/quiz/generate/{{ course_id }}', {
@@ -110,16 +142,147 @@ if (genForm) {
                 window.location.href = `/quiz/${quiz.id}`;
             } else {
                 const err = await resp.json();
-                document.getElementById('gen-alert').innerHTML = `<div class="alert alert-danger mt-2">${err.detail || '生成失败'}</div>`;
+                showToast(err.detail || '生成失败', 'danger');
             }
         } catch (e) {
-            document.getElementById('gen-alert').innerHTML = '<div class="alert alert-danger mt-2">网络错误</div>';
+            showToast('网络错误', 'danger');
+        } finally {
+            setLoading(btn, false);
         }
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-magic me-1"></i>生成';
     });
 }
 
+async function loadStats() {
+    try {
+        const resp = await fetch('/api/quiz/stats/{{ course_id }}');
+        const data = await resp.json();
+        const container = document.getElementById('stats-content');
+
+        let weakestHtml = '';
+        if (data.weakest_points && data.weakest_points.length > 0) {
+            weakestHtml = `<div class="alert alert-danger mb-4"><strong><i class="bi bi-exclamation-triangle me-1"></i>薄弱知识点：</strong>${data.weakest_points.map(p => `<span class="badge bg-danger ms-1">${p}</span>`).join('')}</div>`;
+        }
+
+        container.innerHTML = `
+            <div class="row g-3 mb-4">
+                <div class="col-4">
+                    <div class="card shadow-sm border-0 text-center p-3">
+                        <div class="h4 mb-0 text-primary">${data.total_attempts}</div>
+                        <small class="text-muted">总答题数</small>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="card shadow-sm border-0 text-center p-3">
+                        <div class="h4 mb-0 ${data.overall_percentage >= 60 ? 'text-success' : 'text-danger'}">${data.overall_percentage}%</div>
+                        <small class="text-muted">总正确率</small>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="card shadow-sm border-0 text-center p-3">
+                        <div class="h4 mb-0 text-info">${data.total_quizzes}</div>
+                        <small class="text-muted">练习总数</small>
+                    </div>
+                </div>
+            </div>
+            ${weakestHtml}
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 p-3"><canvas id="kpChart"></canvas></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 p-3"><canvas id="diffChart"></canvas></div>
+                </div>
+            </div>
+            <div class="card shadow-sm border-0 p-3 mb-3">
+                <canvas id="trendChart"></canvas>
+            </div>
+        `;
+
+        if (data.by_knowledge_point && data.by_knowledge_point.length > 0) {
+            const kpLabels = data.by_knowledge_point.map(d => d.name);
+            const kpData = data.by_knowledge_point.map(d => d.percentage);
+            const kpColors = data.by_knowledge_point.map(d => d.percentage >= 80 ? '#198754' : d.percentage >= 60 ? '#ffc107' : '#dc3545');
+            new Chart(document.getElementById('kpChart'), {
+                type: 'bar',
+                data: {
+                    labels: kpLabels,
+                    datasets: [{
+                        label: '正确率 (%)',
+                        data: kpData,
+                        backgroundColor: kpColors,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: '知识点掌握情况' } },
+                    scales: { y: { beginAtZero: true, max: 100 } }
+                }
+            });
+        }
+
+        if (data.by_difficulty && data.by_difficulty.length > 0) {
+            new Chart(document.getElementById('diffChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: data.by_difficulty.map(d => d.difficulty + ' (' + d.correct + '/' + d.total + ')'),
+                    datasets: [{
+                        data: data.by_difficulty.map(d => d.total > 0 ? Math.round(d.correct / d.total * 100) : 0),
+                        backgroundColor: ['#198754', '#ffc107', '#dc3545'],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: '难度分布正确率' } }
+                }
+            });
+        }
+
+        if (data.weekly_trend && data.weekly_trend.length > 0) {
+            new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels: data.weekly_trend.map(d => d.week),
+                    datasets: [
+                        {
+                            label: '平均正确率 (%)',
+                            data: data.weekly_trend.map(d => d.score_avg),
+                            borderColor: '#0d6efd',
+                            backgroundColor: 'rgba(13,110,253,0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y',
+                        },
+                        {
+                            label: '做题数',
+                            data: data.weekly_trend.map(d => d.attempts),
+                            borderColor: '#198754',
+                            backgroundColor: 'rgba(25,135,84,0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y1',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: '最近 8 周趋势' } },
+                    scales: {
+                        y: { beginAtZero: true, max: 100, position: 'left', title: { display: true, text: '正确率 (%)' } },
+                        y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '做题数' } }
+                    }
+                }
+            });
+        }
+    } catch (e) {
+        document.getElementById('stats-content').innerHTML = '<div class="alert alert-danger">加载统计失败</div>';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', loadQuizzes);
+
+document.getElementById('stats-tab')?.addEventListener('shown.bs.tab', function() {
+    loadStats();
+});
 </script>
 {% endblock %}

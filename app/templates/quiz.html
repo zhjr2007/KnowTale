@@ -52,8 +52,7 @@ document.getElementById('quiz-form').addEventListener('submit', async function(e
     {% endfor %}
 
     const btn = this.querySelector('button[type=submit]');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>批改中...';
+    setLoading(btn);
 
     try {
         const resp = await fetch('/api/quiz/{{ quiz.id }}/submit', {
@@ -65,14 +64,12 @@ document.getElementById('quiz-form').addEventListener('submit', async function(e
             const result = await resp.json();
             window.location.href = `/quiz/{{ quiz.id }}/result/${result.attempt_id}`;
         } else {
-            alert('提交失败');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>提交批改';
+            showToast('提交失败', 'danger');
+            setLoading(btn, false);
         }
     } catch (e) {
-        alert('网络错误');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>提交批改';
+        showToast('网络错误', 'danger');
+        setLoading(btn, false);
     }
 });
 </script>

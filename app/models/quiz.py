@@ -1,5 +1,5 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from datetime import datetime, date
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -62,5 +62,8 @@ class WrongBookRecord(Base):
     question_type = Column(String(20), default="choice")
     source_quiz_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    review_count = Column(Integer, default=0)
+    next_review_date = Column(Date, nullable=True)
+    last_review_at = Column(DateTime, nullable=True)
     student = relationship("User", backref="wrong_records")
     course = relationship("Course", backref="wrong_records")

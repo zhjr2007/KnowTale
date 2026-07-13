@@ -1,5 +1,17 @@
 {% extends "base.html" %}
 {% block title %}错题本{% endblock %}
+{% block extra_head %}
+<style>
+.flip-card { perspective: 1000px; margin-bottom: 16px; }
+.flip-card-inner { transition: transform 0.6s; transform-style: preserve-3d; position: relative; }
+.flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back { backface-visibility: hidden; position: relative; }
+.flip-card-back { position: absolute; top: 0; left: 0; right: 0; transform: rotateY(180deg); }
+.review-actions { display: flex; gap: 12px; justify-content: center; margin-top: 12px; }
+.review-actions .btn { min-width: 100px; }
+.review-header { border-left: 4px solid #f59e0b; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="mb-3">
     <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
@@ -9,13 +21,45 @@
 
 <h5 class="fw-bold mb-3"><i class="bi bi-journal me-2"></i>错题本</h5>
 
+<div id="review-section" class="card shadow-sm border-0 mb-4 review-header" style="display:none;">
+    <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-arrow-repeat me-2 text-warning"></i>今日复习 <span id="review-count-badge" class="badge bg-warning ms-2">0</span></h6>
+        <div id="review-content" class="text-center text-muted py-3">
+            <p id="review-empty">暂无待复习的错题</p>
+            <div id="review-card-area" style="display:none;">
+                <div id="review-progress" class="small text-muted mb-2">1 / 1</div>
+                <div class="flip-card" id="flipCard">
+                    <div class="flip-card-inner">
+                        <div class="flip-card-front card shadow-sm border-0">
+                            <div class="card-body p-4">
+                                <p class="fw-bold mb-0" id="review-question"></p>
+                            </div>
+                        </div>
+                        <div class="flip-card-back card shadow-sm border-0">
+                            <div class="card-body p-4">
+                                <p class="text-danger mb-2"><strong>你的答案：</strong><span id="review-student-answer"></span></p>
+                                <p class="text-success mb-0"><strong>正确答案：</strong><span id="review-correct-answer"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="review-before-answer" class="text-center mt-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="flipCard()">显示答案</button>
+                </div>
+                <div id="review-after-answer" class="review-actions" style="display:none;">
+                    <button class="btn btn-outline-danger" onclick="reviewResult(false)">答错了</button>
+                    <button class="btn btn-outline-success" onclick="reviewResult(true)">答对了</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="d-flex gap-2 mb-3">
     <button id="redo-btn" class="btn btn-primary" onclick="redoQuiz()">
         <i class="bi bi-arrow-repeat me-1"></i>生成巩固练习
     </button>
 </div>
-
-<div id="redo-alert"></div>
 
 <div id="wrong-list">
     <div class="text-center py-4 text-muted">
@@ -26,6 +70,62 @@
 
 {% block extra_scripts %}
 <script>
+var reviewRecords = [];
+var reviewIndex = 0;
+
+async function loadReview() {
+    try {
+        const resp = await fetch('/api/wrong-book/review-today/{{ course_id }}');
+        if (!resp.ok) return;
+        reviewRecords = await resp.json();
+        var section = document.getElementById('review-section');
+        var badge = document.getElementById('review-count-badge');
+        if (reviewRecords.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = '';
+        badge.textContent = reviewRecords.length;
+        reviewIndex = 0;
+        showReviewCard();
+    } catch (e) {}
+}
+
+function showReviewCard() {
+    if (reviewIndex >= reviewRecords.length) {
+        document.getElementById('review-card-area').style.display = 'none';
+        document.getElementById('review-empty').textContent = '今日复习完成！';
+        document.getElementById('review-empty').style.display = '';
+        return;
+    }
+    var r = reviewRecords[reviewIndex];
+    document.getElementById('review-progress').textContent = (reviewIndex + 1) + ' / ' + reviewRecords.length;
+    document.getElementById('review-question').textContent = r.question_content;
+    document.getElementById('review-student-answer').textContent = r.student_answer;
+    document.getElementById('review-correct-answer').textContent = r.correct_answer;
+    document.getElementById('flipCard').classList.remove('flipped');
+    document.getElementById('review-before-answer').style.display = '';
+    document.getElementById('review-after-answer').style.display = 'none';
+    document.getElementById('review-card-area').style.display = '';
+}
+
+function flipCard() {
+    document.getElementById('flipCard').classList.add('flipped');
+    document.getElementById('review-before-answer').style.display = 'none';
+    document.getElementById('review-after-answer').style.display = '';
+}
+
+async function reviewResult(isCorrect) {
+    var r = reviewRecords[reviewIndex];
+    try {
+        var formData = new FormData();
+        formData.append('is_correct', isCorrect ? 'true' : 'false');
+        await fetch('/api/wrong-book/review/' + r.id, { method: 'POST', body: formData });
+    } catch (e) {}
+    reviewIndex++;
+    showReviewCard();
+}
+
 async function loadWrongBook() {
     try {
         const resp = await fetch('/api/wrong-book/{{ course_id }}');
@@ -63,14 +163,18 @@ async function deleteRecord(id) {
     if (!confirm('确定删除这条错题记录？')) return;
     try {
         const resp = await fetch(`/api/wrong-book/${id}`, { method: 'DELETE' });
-        if (resp.ok) loadWrongBook();
-    } catch (e) {}
+        if (resp.ok) {
+            loadWrongBook();
+            showToast('错题已删除', 'success');
+        }
+    } catch (e) {
+        showToast('删除失败', 'danger');
+    }
 }
 
 async function redoQuiz() {
     const btn = document.getElementById('redo-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>生成中...';
+    setLoading(btn);
     try {
         const resp = await fetch('/api/wrong-book/redo/{{ course_id }}', { method: 'POST' });
         if (resp.ok) {
@@ -78,15 +182,18 @@ async function redoQuiz() {
             window.location.href = `/quiz/${quiz.id}`;
         } else {
             const err = await resp.json();
-            document.getElementById('redo-alert').innerHTML = `<div class="alert alert-warning">${err.detail || '生成失败'}</div>`;
+            showToast(err.detail || '生成失败', 'warning');
         }
     } catch (e) {
-        document.getElementById('redo-alert').innerHTML = '<div class="alert alert-danger">网络错误</div>';
+        showToast('网络错误', 'danger');
+    } finally {
+        setLoading(btn, false);
     }
-    btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>生成巩固练习';
 }
 
-document.addEventListener('DOMContentLoaded', loadWrongBook);
+document.addEventListener('DOMContentLoaded', function() {
+    loadReview();
+    loadWrongBook();
+});
 </script>
 {% endblock %}

@@ -14,7 +14,7 @@
     </div>
 </div>
 
-<ul class="nav nav-tabs mb-4" id="courseTabs" role="tablist">
+<ul class="nav nav-tabs mb-4 overflow-x-auto flex-nowrap" id="courseTabs" role="tablist">
     <li class="nav-item" role="presentation">
         <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button">
             <i class="bi bi-chat-dots me-1"></i>学习群聊
@@ -37,10 +37,23 @@
 <div class="tab-content">
     <div class="tab-pane fade show active" id="chat">
         <div class="card shadow-sm border-0">
-            <div class="card-body text-center text-muted py-5">
-                <i class="bi bi-chat-dots" style="font-size: 3rem;"></i>
-                <p class="mt-3">学习群聊功能即将上线</p>
-                <p class="small">AI教师 + 各类AI学生将在这里与你互动</p>
+            <div class="card-body text-center py-5">
+                <i class="bi bi-chat-dots" style="font-size: 3rem; color: #1a56db;"></i>
+                <p class="mt-3 fw-bold">与 AI 教师和 AI 同学一起讨论学习</p>
+                <p class="small text-muted mb-4">AI教师 + 基础小问 + 中坚小固 + 拓思考 + 学长知喻</p>
+                <a href="/chat/{{ course_id }}" class="btn btn-primary">
+                    <i class="bi bi-chat-square-text me-1"></i>进入群聊
+                </a>
+            </div>
+        </div>
+        <div class="card shadow-sm border-0 mt-3" id="chat-preview-card" style="display:none;">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>最近消息</h6>
+                <div id="chat-preview"></div>
+                <div id="chat-placeholder" class="text-center text-muted py-3">
+                    <i class="bi bi-chat-dots" style="font-size: 2rem;"></i>
+                    <p class="mt-2 small">还没有消息，开始群聊吧！</p>
+                </div>
             </div>
         </div>
     </div>
@@ -90,7 +103,6 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div id="upload-alert"></div>
                         <form id="upload-form">
                             <div class="mb-3">
                                 <label class="form-label">选择文件（PDF、Word、PPT）</label>
@@ -111,7 +123,7 @@
     <div class="tab-pane fade" id="tools">
         {% if user.role == 'teacher' %}
         <div class="row g-4">
-            <div class="col-md-6">
+            <div class="col-sm-6">
                 <a href="javascript:void(0)" onclick="switchTab('kb-tab', 'knowledge')" class="text-decoration-none">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body text-center py-4">
@@ -122,7 +134,7 @@
                 </div>
                 </a>
             </div>
-            <div class="col-md-6">
+            <div class="col-sm-6">
                 <a href="/students/{{ course_id }}" class="text-decoration-none">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body text-center py-4">
@@ -133,7 +145,7 @@
                 </div>
                 </a>
             </div>
-            <div class="col-md-6">
+            <div class="col-sm-6">
                 <a href="/analytics/{{ course_id }}" class="text-decoration-none">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body text-center py-4">
@@ -144,7 +156,7 @@
                 </div>
                 </a>
             </div>
-            <div class="col-md-6">
+            <div class="col-sm-6">
                 <a href="/approvals/{{ course_id }}" class="text-decoration-none">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body text-center py-4">
@@ -155,10 +167,21 @@
                 </div>
                 </a>
             </div>
+            <div class="col-sm-6">
+                <a href="/study-plan/{{ course_id }}" class="text-decoration-none">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center py-4">
+                        <i class="bi bi-calendar-check text-primary" style="font-size: 2rem;"></i>
+                        <h6 class="mt-2">学习计划</h6>
+                        <p class="small text-muted">AI 生成每日学习计划</p>
+                    </div>
+                </div>
+                </a>
+            </div>
         </div>
         {% else %}
         <div class="row g-4">
-            <div class="col-md-6">
+            <div class="col-sm-6">
                 <a href="/quiz/list/{{ course_id }}" class="text-decoration-none">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body text-center py-4">
@@ -169,7 +192,7 @@
                 </div>
                 </a>
             </div>
-            <div class="col-md-6">
+            <div class="col-sm-6">
                 <a href="/wrong-book/{{ course_id }}" class="text-decoration-none">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body text-center py-4">
@@ -180,7 +203,7 @@
                 </div>
                 </a>
             </div>
-            <div class="col-md-6">
+            <div class="col-sm-6">
                 <a href="/review/{{ course_id }}" class="text-decoration-none">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body text-center py-4">
@@ -191,13 +214,24 @@
                 </div>
                 </a>
             </div>
-            <div class="col-md-6">
+            <div class="col-sm-6">
                 <a href="/mindmap/{{ course_id }}" class="text-decoration-none">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body text-center py-4">
                         <i class="bi bi-diagram-3 text-primary" style="font-size: 2rem;"></i>
                         <h6 class="mt-2">思维导图</h6>
                         <p class="small text-muted">自动梳理课程知识脉络</p>
+                    </div>
+                </div>
+                </a>
+            </div>
+            <div class="col-sm-6">
+                <a href="/study-plan/{{ course_id }}" class="text-decoration-none">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center py-4">
+                        <i class="bi bi-calendar-check text-primary" style="font-size: 2rem;"></i>
+                        <h6 class="mt-2">学习计划</h6>
+                        <p class="small text-muted">AI 生成每日学习计划</p>
                     </div>
                 </div>
                 </a>
@@ -256,9 +290,45 @@ async function loadKnowledge() {
     } catch (e) {}
 }
 
+async function loadChatPreview() {
+    try {
+        var resp = await fetch('/api/chat/history/' + courseId + '?limit=10');
+        if (resp.ok) {
+            var msgs = await resp.json();
+            var container = document.getElementById('chat-preview');
+            var placeholder = document.getElementById('chat-placeholder');
+            if (msgs.length === 0) {
+                placeholder.innerHTML = '<i class="bi bi-chat-dots" style="font-size: 2rem;"></i><p class="mt-2 small">还没有消息，开始群聊吧！</p>';
+                return;
+            }
+            placeholder.style.display = 'none';
+            msgs.forEach(function(msg) {
+                var isSelf = msg.speaker_type === 'student';
+                var name = msg.speaker_name || '未知';
+                var div = document.createElement('div');
+                div.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;' + (isSelf ? 'flex-direction:row-reverse' : '');
+                var truncated = msg.content.length > 100 ? msg.content.substring(0, 100) + '...' : msg.content;
+                div.innerHTML =
+                    '<div style="max-width:70%;padding:8px 12px;border-radius:10px;font-size:0.85rem;' +
+                    (isSelf ? 'background:#1a56db;color:#fff;border-bottom-right-radius:4px' : 'background:#fff;border:1px solid #e9ecef;border-bottom-left-radius:4px') +
+                    '"><small style="display:block;' + (isSelf ? 'color:rgba(255,255,255,0.7)' : 'color:#999') + ';font-size:0.7rem;margin-bottom:2px">' + name + '</small>' + escapeHtml(truncated) + '</div>';
+                container.appendChild(div);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+    } catch(e) {}
+}
+
+function escapeHtml(text) {
+    var d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     loadCourse();
     loadKnowledge();
+    loadChatPreview();
 });
 
 var uploadForm = document.getElementById('upload-form');
@@ -267,21 +337,25 @@ if (uploadForm) {
         e.preventDefault();
         var form = new FormData(this);
         var progress = document.getElementById('upload-progress');
+        var btn = this.querySelector('button[type=submit]');
         progress.classList.remove('d-none');
-        document.getElementById('upload-alert').innerHTML = '';
+        setLoading(btn);
         try {
             var resp = await fetch('/api/knowledge/upload/' + courseId, { method: 'POST', body: form });
             progress.classList.add('d-none');
             if (resp.ok) {
                 var modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
                 modal.hide(); this.reset(); loadKnowledge();
+                showToast('上传成功', 'success');
             } else {
                 var err = await resp.json();
-                document.getElementById('upload-alert').innerHTML = '<div class="alert alert-danger">' + (err.detail || '上传失败') + '</div>';
+                showToast(err.detail || '上传失败', 'danger');
             }
         } catch (e) {
             progress.classList.add('d-none');
-            document.getElementById('upload-alert').innerHTML = '<div class="alert alert-danger">网络错误</div>';
+            showToast('网络错误', 'danger');
+        } finally {
+            setLoading(btn, false);
         }
     });
 }
@@ -294,6 +368,9 @@ async function rebuildKnowledge() {
     try {
         await fetch('/api/knowledge/rebuild/' + courseId, { method: 'POST' });
         loadKnowledge();
+        showToast('重建完成', 'success');
+    } catch (e) {
+        showToast('重建失败', 'danger');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>重建索引';

@@ -5,6 +5,8 @@
 data/*
 !data/.gitkeep
 *.db
+data/*.db-journal
+data/*.db-wal
 
 # Uploads (keep .gitkeep)
 uploads/*
@@ -26,3 +28,9 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# 部署相关
+docker-compose.override.yml
+
+# 备份
+backups/

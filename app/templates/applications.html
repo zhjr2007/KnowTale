@@ -86,12 +86,13 @@ async function approveApp(enrollmentId) {
         const resp = await fetch(`/api/courses/${courseId}/applications/${enrollmentId}/approve`, { method: 'POST' });
         if (resp.ok) {
             loadApplications();
+            showToast('已批准入班', 'success');
         } else {
             const err = await resp.json();
-            alert(err.detail || '操作失败');
+            showToast(err.detail || '操作失败', 'danger');
         }
     } catch (e) {
-        alert('网络错误');
+        showToast('网络错误', 'danger');
     }
 }
 
@@ -100,12 +101,13 @@ async function rejectApp(enrollmentId) {
         const resp = await fetch(`/api/courses/${courseId}/applications/${enrollmentId}/reject`, { method: 'POST' });
         if (resp.ok) {
             loadApplications();
+            showToast('已拒绝入班', 'info');
         } else {
             const err = await resp.json();
-            alert(err.detail || '操作失败');
+            showToast(err.detail || '操作失败', 'danger');
         }
     } catch (e) {
-        alert('网络错误');
+        showToast('网络错误', 'danger');
     }
 }
 

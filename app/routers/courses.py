@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.course import Course, CourseEnrollment
 from app.models.user import User
+from app.models.notification import Notification
 from app.dependencies import require_user, require_teacher
 from app.services.agent_factory import (
     generate_teacher_role,
@@ -424,6 +425,13 @@ async def approve_application(
         raise HTTPException(status_code=404, detail="\u7533\u8bf7\u4e0d\u5b58\u5728\u6216\u5df2\u5904\u7406")
 
     e.status = "approved"
+    db.add(Notification(
+        user_id=e.student_id,
+        type="enrollment_approved",
+        title="\u5165\u73ed\u7533\u8bf7\u5df2\u901a\u8fc7",
+        content=f"\u4f60\u5df2\u6210\u529f\u52a0\u5165\u8bfe\u7a0b\u300c{course.name}\u300d",
+        course_id=course_id,
+    ))
     await db.commit()
     return {"message": "\u5df2\u6279\u51c6\u5165\u73ed"}
 
@@ -454,6 +462,13 @@ async def reject_application(
         raise HTTPException(status_code=404, detail="\u7533\u8bf7\u4e0d\u5b58\u5728\u6216\u5df2\u5904\u7406")
 
     e.status = "rejected"
+    db.add(Notification(
+        user_id=e.student_id,
+        type="enrollment_rejected",
+        title="\u5165\u73ed\u7533\u8bf7\u88ab\u62d2\u7edd",
+        content=f"\u4f60\u7684\u5165\u73ed\u7533\u8bf7\u88ab\u62d2\u7edd\uff0c\u8bfe\u7a0b\u300c{course.name}\u300d",
+        course_id=course_id,
+    ))
     await db.commit()
     return {"message": "\u5df2\u62d2\u7edd\u5165\u73ed"}
 
@@ -595,3 +610,97 @@ async def update_role_settings(
         course.student_roles_config = json.dumps(student_config, ensure_ascii=False)
         await db.commit()
         return {"message": f"{role_type} \u89d2\u8272\u8bbe\u7f6e\u5df2\u66f4\u65b0"}
+
+
+@router.get("/{course_id}/members")
+async def list_members(
+    course_id: int,
+    user: User = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="\u8bfe\u7a0b\u4e0d\u5b58\u5728")
+    if course.teacher_id != user.id:
+        raise HTTPException(status_code=403, detail="\u53ea\u80fd\u67e5\u770b\u81ea\u5df1\u8bfe\u7a0b\u7684\u6210\u5458")
+
+    enrollments = await db.execute(
+        select(CourseEnrollment)
+        .where(
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.status == "approved",
+        )
+        .order_by(CourseEnrollment.enrolled_at.desc())
+    )
+    rows = enrollments.scalars().all()
+
+    result_list = []
+    for e in rows:
+        stu = await db.execute(select(User).where(User.id == e.student_id))
+        student = stu.scalar_one_or_none()
+        if student:
+            result_list.append({
+                "id": student.id,
+                "username": student.username,
+                "display_name": student.display_name,
+                "avatar": student.avatar,
+                "enrolled_at": e.enrolled_at.isoformat() if e.enrolled_at else None,
+            })
+
+    return result_list
+
+
+@router.delete("/{course_id}/members/{student_id}")
+async def remove_member(
+    course_id: int,
+    student_id: int,
+    user: User = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="\u8bfe\u7a0b\u4e0d\u5b58\u5728")
+    if course.teacher_id != user.id:
+        raise HTTPException(status_code=403, detail="\u53ea\u80fd\u64cd\u4f5c\u81ea\u5df1\u8bfe\u7a0b\u7684\u6210\u5458")
+
+    enrollment = await db.execute(
+        select(CourseEnrollment).where(
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.student_id == student_id,
+            CourseEnrollment.status == "approved",
+        )
+    )
+    e = enrollment.scalar_one_or_none()
+    if not e:
+        raise HTTPException(status_code=404, detail="\u8be5\u5b66\u751f\u4e0d\u662f\u8bfe\u7a0b\u6210\u5458")
+
+    await db.delete(e)
+    await db.commit()
+    return {"message": "\u5df2\u79fb\u9664\u8be5\u5b66\u751f"}
+
+
+@router.post("/{course_id}/leave")
+async def leave_course(
+    course_id: int,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role != "student":
+        raise HTTPException(status_code=403, detail="\u4ec5\u5b66\u751f\u53ef\u9000\u51fa\u8bfe\u7a0b")
+
+    enrollment = await db.execute(
+        select(CourseEnrollment).where(
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.student_id == user.id,
+            CourseEnrollment.status == "approved",
+        )
+    )
+    e = enrollment.scalar_one_or_none()
+    if not e:
+        raise HTTPException(status_code=404, detail="\u672a\u52a0\u5165\u8be5\u8bfe\u7a0b")
+
+    await db.delete(e)
+    await db.commit()
+    return {"message": "\u5df2\u9000\u51fa\u8bfe\u7a0b"}

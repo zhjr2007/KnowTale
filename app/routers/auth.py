@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Request, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse
+from pathlib import Path
+from fastapi import APIRouter, Request, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import bcrypt
@@ -8,6 +9,9 @@ from pydantic import BaseModel, EmailStr
 from app.database import get_db
 from app.models.user import User
 from app.dependencies import create_access_token, get_current_user, require_user, require_teacher
+
+AVATARS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads" / "avatars"
+AVATARS_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -141,3 +145,55 @@ async def change_password(
     user.hashed_password = _hash_password(req.new_password)
     await db.commit()
     return {"message": "密码已修改"}
+
+
+@router.post("/user/profile/update")
+async def update_profile(
+    display_name: str = Form(None),
+    avatar: UploadFile = File(None),
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if display_name is not None:
+        display_name = display_name.strip()
+        if display_name:
+            user.display_name = display_name
+
+    if avatar:
+        ext = Path(avatar.filename).suffix.lower()
+        if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
+            return JSONResponse(status_code=400, content={"detail": "仅支持 jpg/png/gif/webp 格式的图片"})
+        content = await avatar.read()
+        if len(content) > 2 * 1024 * 1024:
+            return JSONResponse(status_code=400, content={"detail": "头像文件大小不能超过 2MB"})
+        from datetime import datetime
+        filename = f"{user.id}_{int(datetime.utcnow().timestamp())}{ext}"
+        save_path = AVATARS_DIR / filename
+        save_path.write_bytes(content)
+        user.avatar = f"/uploads/avatars/{filename}"
+
+    await db.commit()
+    await db.refresh(user)
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "avatar": user.avatar,
+        "role": user.role,
+        "email": user.email,
+    }
+
+
+@router.get("/user/profile")
+async def get_profile(
+    user: User = Depends(require_user),
+):
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "display_name": user.display_name,
+        "avatar": user.avatar,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+    }

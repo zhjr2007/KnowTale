@@ -207,8 +207,7 @@ document.getElementById('answer-form')?.addEventListener('submit', async functio
     if (!studentAns) return;
 
     const btn = this.querySelector('button');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>批改中...';
+    setLoading(btn);
 
     try {
         const resp = await fetch('/api/review/check', {
@@ -227,10 +226,10 @@ document.getElementById('answer-form')?.addEventListener('submit', async functio
         document.getElementById('next-btn').classList.remove('d-none');
         document.getElementById('reveal-btn').classList.add('d-none');
     } catch (e) {
-        alert('网络错误');
+        showToast('网络错误', 'danger');
+    } finally {
+        setLoading(btn, false);
     }
-    btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-check me-1"></i>核对答案';
 });
 
 function revealAnswer() {

@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}AI 学习计划{% endblock %}
+{% block extra_head %}
+<style>
+.plan-item-completed {
+    opacity: 0.6;
+    text-decoration: line-through;
+}
+.progress-bar-custom {
+    height: 8px;
+    border-radius: 4px;
+}
+.task-badge-review { background-color: #e3f2fd; color: #1565c0; }
+.task-badge-quiz { background-color: #fce4ec; color: #c62828; }
+.task-badge-chat_practice { background-color: #f3e5f5; color: #6a1b9a; }
+.generating-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程
+    </a>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-calendar-check me-2"></i>AI 学习计划</h4>
+        <span class="text-muted small" id="course-name-display"></span>
+    </div>
+    <div>
+        <button class="btn btn-outline-secondary me-2" id="regenerate-btn" style="display:none;" onclick="regeneratePlan()">
+            <i class="bi bi-arrow-repeat me-1"></i>重新生成
+        </button>
+        <button class="btn btn-primary" id="generate-btn" onclick="generatePlan()">
+            <i class="bi bi-magic me-1"></i>生成计划
+        </button>
+    </div>
+</div>
+
+<div id="generating-overlay" class="generating-overlay d-none">
+    <div class="text-center">
+        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
+        <h5 class="text-primary">AI 正在分析你的学习数据...</h5>
+        <p class="text-muted small">正在结合错题本、练习统计和课程知识生成个性化计划</p>
+    </div>
+</div>
+
+<div id="empty-state" class="text-center py-5">
+    <i class="bi bi-calendar-plus text-muted" style="font-size: 4rem;"></i>
+    <h5 class="mt-3 text-muted">还没有学习计划</h5>
+    <p class="text-muted small">点击"生成计划"按钮，AI 将根据你的学习情况自动生成个性化每日计划</p>
+</div>
+
+<div id="plan-content" style="display:none;">
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <small class="text-muted" id="plan-time"></small>
+                <small class="text-muted" id="plan-progress-text"></small>
+            </div>
+            <div class="progress progress-bar-custom">
+                <div class="progress-bar" id="plan-progress-bar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" id="dayTabs" role="tablist"></ul>
+
+    <div class="tab-content" id="dayTabContent"></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var courseId = {{ course_id }};
+var currentPlanId = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadCourseInfo();
+    loadPlan();
+});
+
+async function loadCourseInfo() {
+    try {
+        var resp = await fetch('/api/courses/' + courseId);
+        if (resp.ok) {
+            var c = await resp.json();
+            document.getElementById('course-name-display').textContent = c.name;
+        }
+    } catch (e) {}
+}
+
+async function loadPlan() {
+    try {
+        var resp = await fetch('/api/study-plan/' + courseId);
+        if (resp.ok) {
+            var data = await resp.json();
+            if (data.plan) {
+                renderPlan(data.plan);
+            }
+        }
+    } catch (e) {}
+}
+
+function renderPlan(plan) {
+    currentPlanId = plan.id;
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('plan-content').style.display = 'block';
+    document.getElementById('regenerate-btn').style.display = 'inline-block';
+
+    document.getElementById('plan-time').innerHTML = '<i class="bi bi-clock me-1"></i>生成时间: ' + (plan.created_at ? new Date(plan.created_at).toLocaleString() : '未知');
+    document.getElementById('plan-progress-text').textContent = '已完成 ' + plan.completed_items + '/' + plan.total_items + ' 项';
+    document.getElementById('plan-progress-bar').style.width = plan.progress + '%';
+
+    var days = {};
+    plan.items.forEach(function(item) {
+        if (!days[item.day]) days[item.day] = [];
+        days[item.day].push(item);
+    });
+
+    var tabList = document.getElementById('dayTabs');
+    var tabContent = document.getElementById('dayTabContent');
+    tabList.innerHTML = '';
+    tabContent.innerHTML = '';
+
+    var dayKeys = Object.keys(days).sort(function(a, b) { return parseInt(a) - parseInt(b); });
+    dayKeys.forEach(function(day, idx) {
+        var active = idx === 0 ? ' active' : '';
+        tabList.innerHTML += '<li class="nav-item" role="presentation">' +
+            '<button class="nav-link' + active + '" id="day-' + day + '-tab" data-bs-toggle="tab" data-bs-target="#day-' + day + '" type="button">第' + day + '天</button></li>';
+
+        var itemsHtml = days[day].map(function(item) {
+            var badgeClass = 'task-badge-review';
+            var badgeText = '复习';
+            if (item.task_type === 'quiz') { badgeClass = 'task-badge-quiz'; badgeText = '练习'; }
+            if (item.task_type === 'chat_practice') { badgeClass = 'task-badge-chat_practice'; badgeText = '讨论'; }
+
+            var checked = item.is_completed ? ' checked' : '';
+            var itemClass = item.is_completed ? ' plan-item-completed' : '';
+
+            return '<div class="list-group-item d-flex align-items-center gap-3' + itemClass + '">' +
+                '<input class="form-check-input" type="checkbox" ' + checked + ' onchange="toggleItem(' + item.id + ', this)" style="cursor:pointer;">' +
+                '<div class="flex-grow-1">' +
+                '<span class="badge ' + badgeClass + ' me-2">' + badgeText + '</span>' +
+                '<strong>' + item.knowledge_point + '</strong>' +
+                '</div>' +
+                '<small class="text-muted">' + item.description + '</small>' +
+                '</div>';
+        }).join('');
+
+        tabContent.innerHTML += '<div class="tab-pane fade' + (idx === 0 ? ' show active' : '') + '" id="day-' + day + '">' +
+            '<div class="list-group">' + itemsHtml + '</div></div>';
+    });
+}
+
+async function generatePlan() {
+    var days = 7;
+    document.getElementById('generating-overlay').classList.remove('d-none');
+    document.getElementById('generate-btn').disabled = true;
+    try {
+        var resp = await fetch('/api/study-plan/generate/' + courseId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ days: days }),
+        });
+        if (resp.ok) {
+            await loadPlan();
+        } else {
+            var err = await resp.json();
+            showToast(err.detail || '生成失败，请重试', 'danger');
+        }
+    } catch (e) {
+        showToast('网络错误，请重试', 'danger');
+    } finally {
+        document.getElementById('generating-overlay').classList.add('d-none');
+        document.getElementById('generate-btn').disabled = false;
+    }
+}
+
+async function regeneratePlan() {
+    if (!currentPlanId) return;
+    if (!confirm('将基于已完成项重新生成后续计划，确定？')) return;
+
+    document.getElementById('generating-overlay').classList.remove('d-none');
+    try {
+        var resp = await fetch('/api/study-plan/' + currentPlanId + '/regenerate', {
+            method: 'POST',
+        });
+        if (resp.ok) {
+            await loadPlan();
+        } else {
+            var err = await resp.json();
+            showToast(err.detail || '重新生成失败', 'danger');
+        }
+    } catch (e) {
+        showToast('网络错误', 'danger');
+    } finally {
+        document.getElementById('generating-overlay').classList.add('d-none');
+    }
+}
+
+async function toggleItem(itemId, checkbox) {
+    try {
+        var resp = await fetch('/api/study-plan/item/' + itemId + '/complete', { method: 'POST' });
+        if (resp.ok) {
+            var data = await resp.json();
+            checkbox.checked = data.is_completed;
+            await loadPlan();
+        }
+    } catch (e) {
+        checkbox.checked = !checkbox.checked;
+    }
+}
+</script>
+{% endblock %}

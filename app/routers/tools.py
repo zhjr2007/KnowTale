@@ -1,14 +1,17 @@
 import json
 import random
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, date, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_user
 from app.models.user import User
-from app.models.course import Course
+from app.models.course import Course, CourseEnrollment
 from app.models.quiz import Quiz, Question, QuizAttempt, Answer, WrongBookRecord
+from app.models.notification import Notification
+from app.models.study_plan import StudyPlan, StudyPlanItem
 from app.services.quiz_generator import generate_quiz, grade_short_answer, generate_mindmap, generate_wrong_book_quiz
 from app.services.rag import search
 
@@ -61,6 +64,24 @@ async def create_quiz(
 
     await db.commit()
     await db.refresh(quiz)
+
+    enroll_result = await db.execute(
+        select(CourseEnrollment).where(
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.status == "approved",
+        )
+    )
+    enrolled_students = enroll_result.scalars().all()
+    for enrollment in enrolled_students:
+        db.add(Notification(
+            user_id=enrollment.student_id,
+            type="quiz_published",
+            title=f"\u65b0\u7ec3\u4e60\u53d1\u5e03\uff1a{quiz.title}",
+            content=f"\u8bfe\u7a0b\u300c{course.name}\u300d\u65b0\u589e\u4e86\u4e00\u4efd\u7ec3\u4e60\uff0c\u8bf7\u53ca\u65f6\u5b8c\u6210",
+            course_id=course_id,
+        ))
+    await db.commit()
+
     return {"id": quiz.id, "title": quiz.title, "question_count": quiz.question_count}
 
 
@@ -195,6 +216,7 @@ async def submit_quiz(
                 knowledge_point=q.knowledge_point,
                 question_type=q.question_type,
                 source_quiz_id=quiz_id,
+                next_review_date=date.today(),
             ))
 
         db.add(Answer(
@@ -284,6 +306,9 @@ async def list_wrong_book(
             "knowledge_point": r.knowledge_point,
             "question_type": r.question_type,
             "created_at": r.created_at.isoformat() if r.created_at else None,
+            "review_count": r.review_count,
+            "next_review_date": r.next_review_date.isoformat() if r.next_review_date else None,
+            "last_review_at": r.last_review_at.isoformat() if r.last_review_at else None,
         }
         for r in records
     ]
@@ -308,6 +333,80 @@ async def delete_wrong_record(
     await db.commit()
     return {"message": "已删除"}
 
+
+# ─── 间隔重复复习 ──────────────────────────────────────
+
+@router.get("/api/wrong-book/review-today/{course_id}")
+async def get_todays_review(
+    course_id: int,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """返回今天需要复习的错题"""
+    result = await db.execute(
+        select(WrongBookRecord)
+        .where(
+            WrongBookRecord.student_id == user.id,
+            WrongBookRecord.course_id == course_id,
+            WrongBookRecord.next_review_date <= date.today(),
+        )
+        .order_by(WrongBookRecord.next_review_date.asc())
+        .limit(10)
+    )
+    records = result.scalars().all()
+    return [
+        {
+            "id": r.id,
+            "question_content": r.question_content,
+            "correct_answer": r.correct_answer,
+            "student_answer": r.student_answer,
+            "knowledge_point": r.knowledge_point,
+            "question_type": r.question_type,
+            "review_count": r.review_count,
+            "next_review_date": r.next_review_date.isoformat() if r.next_review_date else None,
+        }
+        for r in records
+    ]
+
+
+@router.post("/api/wrong-book/review/{record_id}")
+async def review_wrong_record(
+    record_id: int,
+    is_correct: bool = Form(...),
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """复习错题后更新间隔重复参数 (简化版 SM-2)"""
+    result = await db.execute(
+        select(WrongBookRecord).where(
+            WrongBookRecord.id == record_id,
+            WrongBookRecord.student_id == user.id,
+        )
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    if is_correct:
+        record.review_count += 1
+        interval = min(2 ** record.review_count, 30)
+    else:
+        record.review_count = 0
+        interval = 1
+
+    record.next_review_date = date.today() + timedelta(days=interval)
+    record.last_review_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "id": record.id,
+        "review_count": record.review_count,
+        "next_review_date": record.next_review_date.isoformat() if record.next_review_date else None,
+        "interval_days": interval,
+    }
+
+
+# ─── 错题巩固 ────────────────────────────────────────────
 
 @router.post("/api/wrong-book/redo/{course_id}")
 async def redo_wrong_book(
@@ -519,29 +618,47 @@ async def quiz_stats(
     user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """学生个人练习统计"""
+    """增强版练习统计 - 区分学生和教师视角"""
     quiz_ids_result = await db.execute(
         select(Quiz.id).where(Quiz.course_id == course_id)
     )
     quiz_ids = [row[0] for row in quiz_ids_result.all()]
     if not quiz_ids:
         return {
-            "total_attempts": 0, "total_questions": 0, "total_correct": 0,
-            "overall_accuracy": 0, "knowledge_stats": [],
+            "by_knowledge_point": [], "by_difficulty": [],
+            "weekly_trend": [], "total_quizzes": 0,
+            "total_attempts": 0, "overall_percentage": 0,
+            "weakest_points": [],
         }
+
+    if user.role == "teacher":
+        student_ids_result = await db.execute(
+            select(CourseEnrollment.student_id).where(
+                CourseEnrollment.course_id == course_id,
+                CourseEnrollment.status == "approved",
+            )
+        )
+        student_ids = [row[0] for row in student_ids_result.all()]
+        if not student_ids:
+            return {
+                "by_knowledge_point": [], "by_difficulty": [],
+                "weekly_trend": [], "total_quizzes": 0,
+                "total_attempts": 0, "overall_percentage": 0,
+                "weakest_points": [],
+            }
+        attempt_filter = QuizAttempt.student_id.in_(student_ids)
+    else:
+        attempt_filter = QuizAttempt.student_id == user.id
 
     a_result = await db.execute(
         select(func.count(QuizAttempt.id), func.sum(QuizAttempt.score), func.sum(QuizAttempt.total))
-        .where(
-            QuizAttempt.student_id == user.id,
-            QuizAttempt.quiz_id.in_(quiz_ids),
-        )
+        .where(attempt_filter, QuizAttempt.quiz_id.in_(quiz_ids))
     )
     row = a_result.one()
     total_attempts = row[0] or 0
     total_correct = row[1] or 0
     total_questions = row[2] or 0
-    overall_accuracy = round(total_correct / total_questions * 100, 1) if total_questions else 0
+    overall_percentage = round(total_correct / total_questions * 100, 1) if total_questions else 0
 
     k_result = await db.execute(
         select(
@@ -552,30 +669,71 @@ async def quiz_stats(
         .select_from(Answer)
         .join(Question, Answer.question_id == Question.id)
         .join(QuizAttempt, Answer.attempt_id == QuizAttempt.id)
-        .where(
-            QuizAttempt.student_id == user.id,
-            Question.quiz_id.in_(quiz_ids),
-        )
+        .where(attempt_filter, Question.quiz_id.in_(quiz_ids))
         .group_by(Question.knowledge_point)
     )
-    knowledge_stats = []
+    by_knowledge_point = []
     for row in k_result:
         kp = row[0] or "未分类"
         k_total = row[1] or 0
         k_correct = row[2] or 0
-        knowledge_stats.append({
-            "knowledge_point": kp,
+        by_knowledge_point.append({
+            "name": kp,
             "total": k_total,
             "correct": k_correct,
-            "accuracy": round(k_correct / k_total * 100, 1) if k_total else 0,
+            "percentage": round(k_correct / k_total * 100, 1) if k_total else 0,
         })
 
+    d_result = await db.execute(
+        select(
+            Question.difficulty,
+            func.count(Answer.id),
+            func.sum(Answer.is_correct),
+        )
+        .select_from(Answer)
+        .join(Question, Answer.question_id == Question.id)
+        .join(QuizAttempt, Answer.attempt_id == QuizAttempt.id)
+        .where(attempt_filter, Question.quiz_id.in_(quiz_ids))
+        .group_by(Question.difficulty)
+    )
+    by_difficulty = []
+    for row in d_result:
+        by_difficulty.append({
+            "difficulty": row[0] or "medium",
+            "total": row[1] or 0,
+            "correct": row[2] or 0,
+        })
+
+    w_result = await db.execute(
+        select(
+            func.strftime('%Y-W%W', QuizAttempt.completed_at),
+            func.avg(QuizAttempt.score * 1.0 / QuizAttempt.total * 100),
+            func.count(QuizAttempt.id),
+        )
+        .where(attempt_filter, QuizAttempt.quiz_id.in_(quiz_ids))
+        .group_by(func.strftime('%Y-W%W', QuizAttempt.completed_at))
+        .order_by(func.strftime('%Y-W%W', QuizAttempt.completed_at).desc())
+        .limit(8)
+    )
+    weekly_trend = []
+    for row in reversed(list(w_result)):
+        weekly_trend.append({
+            "week": row[0] or "",
+            "score_avg": round(row[1], 1) if row[1] else 0,
+            "attempts": row[2] or 0,
+        })
+
+    sorted_kp = sorted(by_knowledge_point, key=lambda x: x["percentage"])
+    weakest_points = [kp["name"] for kp in sorted_kp[:3] if kp["total"] > 0]
+
     return {
+        "by_knowledge_point": by_knowledge_point,
+        "by_difficulty": by_difficulty,
+        "weekly_trend": weekly_trend,
+        "total_quizzes": len(quiz_ids),
         "total_attempts": total_attempts,
-        "total_questions": total_questions,
-        "total_correct": total_correct,
-        "overall_accuracy": overall_accuracy,
-        "knowledge_stats": knowledge_stats,
+        "overall_percentage": overall_percentage,
+        "weakest_points": weakest_points,
     }
 
 
@@ -640,3 +798,380 @@ async def get_mindmap(
 
     mindmap = await generate_mindmap(course_id, course.name)
     return {"course_id": course_id, "course_name": course.name, "mindmap": mindmap}
+
+
+# ─── 学习计划 ──────────────────────────────────────────
+
+
+@router.get("/api/study-plan/{course_id}")
+async def get_study_plan(
+    course_id: int,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(StudyPlan)
+        .where(
+            StudyPlan.student_id == user.id,
+            StudyPlan.course_id == course_id,
+        )
+        .order_by(StudyPlan.created_at.desc())
+        .limit(1)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        return {"plan": None}
+
+    items_result = await db.execute(
+        select(StudyPlanItem)
+        .where(StudyPlanItem.plan_id == plan.id)
+        .order_by(StudyPlanItem.day)
+    )
+    items = items_result.scalars().all()
+
+    total = len(items)
+    completed = sum(1 for i in items if i.is_completed)
+
+    return {
+        "plan": {
+            "id": plan.id,
+            "course_id": plan.course_id,
+            "plan_json": json.loads(plan.plan_json) if isinstance(plan.plan_json, str) else plan.plan_json,
+            "created_at": plan.created_at.isoformat() if plan.created_at else None,
+            "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
+            "items": [
+                {
+                    "id": i.id,
+                    "day": i.day,
+                    "knowledge_point": i.knowledge_point,
+                    "task_type": i.task_type,
+                    "description": i.description,
+                    "is_completed": bool(i.is_completed),
+                    "completed_at": i.completed_at.isoformat() if i.completed_at else None,
+                }
+                for i in items
+            ],
+            "total_items": total,
+            "completed_items": completed,
+            "progress": round(completed / total * 100, 1) if total else 0,
+        }
+    }
+
+
+@router.post("/api/study-plan/generate/{course_id}")
+async def generate_study_plan(
+    course_id: int,
+    body: dict,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course = course_result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    days = min(int(body.get("days", 7)), 30)
+
+    quiz_ids_result = await db.execute(
+        select(Quiz.id).where(Quiz.course_id == course_id)
+    )
+    quiz_ids = [row[0] for row in quiz_ids_result.all()]
+
+    weak_points = []
+    if quiz_ids:
+        stats_result = await db.execute(
+            select(
+                Question.knowledge_point,
+                func.count(Answer.id),
+                func.sum(Answer.is_correct),
+            )
+            .select_from(Answer)
+            .join(Question, Answer.question_id == Question.id)
+            .join(QuizAttempt, Answer.attempt_id == QuizAttempt.id)
+            .where(
+                QuizAttempt.student_id == user.id,
+                Question.quiz_id.in_(quiz_ids),
+            )
+            .group_by(Question.knowledge_point)
+        )
+        for row in stats_result:
+            kp = row[0] or "未分类"
+            k_total = row[1] or 0
+            k_correct = row[2] or 0
+            accuracy = k_correct / k_total * 100 if k_total else 0
+            if accuracy < 60:
+                weak_points.append(kp)
+
+    wrong_result = await db.execute(
+        select(WrongBookRecord)
+        .where(
+            WrongBookRecord.student_id == user.id,
+            WrongBookRecord.course_id == course_id,
+        )
+        .order_by(WrongBookRecord.created_at.desc())
+    )
+    wrong_records = wrong_result.scalars().all()
+    wrong_point_topics = list(set(
+        r.knowledge_point for r in wrong_records if r.knowledge_point
+    ))
+
+    kb_results = await search(course_id, f"{course.name} 知识点 目录 章节", top_k=10)
+    kb_topics = [r.get("text", "")[:200] for r in kb_results if r.get("text")]
+
+    prompt = f"""你是一个AI学习规划师。请为以下学生生成一份为期{days}天的学习计划。
+
+课程: {course.name}
+该学生在以下知识点上表现薄弱: {', '.join(weak_points) if weak_points else '暂无数据，请覆盖核心知识点'}
+错题涉及: {', '.join(wrong_point_topics) if wrong_point_topics else '暂无错题记录'}
+课程覆盖的知识点: {'; '.join(kb_topics) if kb_topics else '暂无课程知识库内容，请基于课程名称生成通用计划'}
+
+请以JSON格式返回每日计划:
+[
+  {{
+    "day": 1,
+    "items": [
+      {{"knowledge_point": "知识点名称", "task_type": "review", "description": "复习描述"}},
+      {{"knowledge_point": "知识点名称", "task_type": "quiz", "description": "练习建议"}}
+    ]
+  }},
+  ...
+]
+
+注意：
+- 建议交替安排复习和练习
+- 优先安排薄弱知识点在前几天
+- 每天最多安排 3 项任务
+- task_type 可选: review(知识点复习), quiz(练习题), chat_practice(与AI同学讨论)"""
+
+    from app.services.llm import chat_completion
+    raw = await chat_completion(
+        messages=[{"role": "user", "content": prompt}],
+        system_prompt="你是一个AI学习规划师。仅输出JSON，不要markdown代码块标记。",
+        temperature=0.7,
+        max_tokens=4096,
+    )
+
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1]
+        raw = raw.rsplit("\n", 1)[0]
+    if raw.startswith("```json"):
+        raw = raw[7:]
+    if raw.endswith("```"):
+        raw = raw[:-3]
+
+    try:
+        plan_data = json.loads(raw)
+        if isinstance(plan_data, dict) and "plan" in plan_data:
+            plan_data = plan_data["plan"]
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="AI 生成计划失败，请重试")
+
+    study_plan = StudyPlan(
+        student_id=user.id,
+        course_id=course_id,
+        plan_json=json.dumps(plan_data, ensure_ascii=False),
+    )
+    db.add(study_plan)
+    await db.flush()
+
+    all_items = []
+    for day_entry in plan_data:
+        day_num = day_entry.get("day", 1)
+        for item in day_entry.get("items", []):
+            all_items.append(StudyPlanItem(
+                plan_id=study_plan.id,
+                day=day_num,
+                knowledge_point=item.get("knowledge_point", ""),
+                task_type=item.get("task_type", "review"),
+                description=item.get("description", ""),
+            ))
+
+    for item in all_items:
+        db.add(item)
+
+    await db.commit()
+    await db.refresh(study_plan)
+
+    return {"id": study_plan.id, "total_items": len(all_items), "days": len(plan_data)}
+
+
+@router.post("/api/study-plan/item/{item_id}/complete")
+async def complete_plan_item(
+    item_id: int,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(StudyPlanItem)
+        .where(StudyPlanItem.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="计划项不存在")
+
+    plan_result = await db.execute(select(StudyPlan).where(StudyPlan.id == item.plan_id))
+    plan = plan_result.scalar_one_or_none()
+    if not plan or plan.student_id != user.id:
+        raise HTTPException(status_code=403, detail="无权限")
+
+    item.is_completed = 1 if not item.is_completed else 0
+    item.completed_at = datetime.utcnow() if item.is_completed else None
+    await db.commit()
+
+    return {"id": item.id, "is_completed": bool(item.is_completed)}
+
+
+@router.post("/api/study-plan/{plan_id}/regenerate")
+async def regenerate_study_plan(
+    plan_id: int,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    plan_result = await db.execute(select(StudyPlan).where(StudyPlan.id == plan_id))
+    plan = plan_result.scalar_one_or_none()
+    if not plan or plan.student_id != user.id:
+        raise HTTPException(status_code=403, detail="无权限")
+
+    items_result = await db.execute(
+        select(StudyPlanItem)
+        .where(StudyPlanItem.plan_id == plan.id)
+        .order_by(StudyPlanItem.day)
+    )
+    items = items_result.scalars().all()
+    completed_points = list(set(
+        i.knowledge_point for i in items if i.is_completed
+    ))
+
+    course_result = await db.execute(select(Course).where(Course.id == plan.course_id))
+    course = course_result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    kb_results = await search(plan.course_id, f"{course.name} 知识点 目录 章节", top_k=10)
+    kb_topics = [r.get("text", "")[:200] for r in kb_results if r.get("text")]
+
+    prompt = f"""你是一个AI学习规划师。请为以下学生生成一份新的学习计划。
+
+课程: {course.name}
+该学生已完成的知识点: {', '.join(completed_points) if completed_points else '暂无'}
+课程覆盖的知识点: {'; '.join(kb_topics) if kb_topics else '暂无'}
+
+请根据已完成的知识点，着重规划未覆盖或需要加强的知识点。
+以JSON格式返回每日计划，格式同上，为期7天。"""
+
+    from app.services.llm import chat_completion
+    raw = await chat_completion(
+        messages=[{"role": "user", "content": prompt}],
+        system_prompt="你是一个AI学习规划师。仅输出JSON，不要markdown代码块标记。",
+        temperature=0.7,
+        max_tokens=4096,
+    )
+
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1]
+        raw = raw.rsplit("\n", 1)[0]
+    if raw.startswith("```json"):
+        raw = raw[7:]
+    if raw.endswith("```"):
+        raw = raw[:-3]
+
+    try:
+        plan_data = json.loads(raw)
+        if isinstance(plan_data, dict) and "plan" in plan_data:
+            plan_data = plan_data["plan"]
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="AI 重新生成计划失败，请重试")
+
+    await db.execute(
+        select(StudyPlanItem).where(StudyPlanItem.plan_id == plan.id)
+    )
+    items_result = await db.execute(
+        select(StudyPlanItem).where(StudyPlanItem.plan_id == plan.id)
+    )
+    for old_item in items_result.scalars().all():
+        await db.delete(old_item)
+
+    plan.plan_json = json.dumps(plan_data, ensure_ascii=False)
+    plan.updated_at = datetime.utcnow()
+
+    all_items = []
+    for day_entry in plan_data:
+        day_num = day_entry.get("day", 1)
+        for item in day_entry.get("items", []):
+            all_items.append(StudyPlanItem(
+                plan_id=plan.id,
+                day=day_num,
+                knowledge_point=item.get("knowledge_point", ""),
+                task_type=item.get("task_type", "review"),
+                description=item.get("description", ""),
+            ))
+
+    for item in all_items:
+        db.add(item)
+
+    await db.commit()
+    return {"id": plan.id, "total_items": len(all_items), "days": len(plan_data)}
+
+
+@router.get("/api/study-plan/daily-recommend/{course_id}")
+async def get_daily_recommend(
+    course_id: int,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """轻量版：每次返回当天的 3 条学习推荐"""
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course = course_result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    wrong_result = await db.execute(
+        select(WrongBookRecord)
+        .where(
+            WrongBookRecord.student_id == user.id,
+            WrongBookRecord.course_id == course_id,
+        )
+        .order_by(WrongBookRecord.created_at.desc())
+        .limit(5)
+    )
+    wrong_records = wrong_result.scalars().all()
+    weak_info = "; ".join(
+        f"{r.knowledge_point}: {r.question_content[:50]}"
+        for r in wrong_records if r.knowledge_point
+    ) if wrong_records else "暂无"
+
+    prompt = f"""你是AI学习助手。为以下课程的学生推荐今天要学习的3项任务。
+课程: {course.name}
+最近错题: {weak_info}
+
+返回JSON数组，每项包含 knowledge_point, task_type (review/quiz/chat_practice), description。
+最多3项，优先薄弱知识点。"""
+
+    from app.services.llm import chat_completion
+    raw = await chat_completion(
+        messages=[{"role": "user", "content": prompt}],
+        system_prompt="仅输出JSON数组，不要markdown。",
+        temperature=0.7,
+        max_tokens=1024,
+    )
+
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1]
+        raw = raw.rsplit("\n", 1)[0]
+    if raw.startswith("```json"):
+        raw = raw[7:]
+    if raw.endswith("```"):
+        raw = raw[:-3]
+
+    try:
+        items = json.loads(raw)
+        return {"items": items[:3]}
+    except json.JSONDecodeError:
+        return {"items": [
+            {"knowledge_point": course.name, "task_type": "review", "description": f"复习{course.name}核心概念"},
+            {"knowledge_point": course.name, "task_type": "quiz", "description": f"做一套{course.name}练习题"},
+            {"knowledge_point": course.name, "task_type": "chat_practice", "description": f"与AI同学讨论{course.name}疑难问题"},
+        ]}

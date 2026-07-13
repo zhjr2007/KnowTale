@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ report.course_name }} - 学情报告{% endblock %}
+{% block extra_head %}
+<style>
+@media print {
+    .no-print { display: none !important; }
+    .card { break-inside: avoid; box-shadow: none !important; border: 1px solid #dee2e6 !important; }
+    body { font-size: 12pt; background: #fff; }
+}
+body { background: #fff; padding: 40px; font-family: system-ui, sans-serif; color: #1e293b; }
+h1 { font-size: 24px; border-bottom: 2px solid #1a56db; padding-bottom: 8px; margin-bottom: 24px; }
+h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; color: #1a56db; }
+.stat-card { display: inline-block; background: #f8fafc; border-radius: 8px; padding: 16px 24px; margin: 8px; text-align: center; }
+.stat-number { font-size: 28px; font-weight: bold; color: #1a56db; }
+.stat-label { font-size: 13px; color: #64748b; }
+table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th { background: #f1f5f9; font-weight: 600; }
+.weak { color: #dc2626; }
+.suggestion { background: #f0f4ff; border-left: 4px solid #1a56db; padding: 12px 16px; border-radius: 4px; margin: 12px 0; white-space: pre-wrap; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="no-print mb-3">
+    <button class="btn btn-primary" onclick="window.print()">导出 PDF</button>
+    <a href="/analytics/{{ course_id }}" class="btn btn-outline-secondary ms-2">返回看板</a>
+</div>
+
+<h1>{{ report.course_name }} - 学情分析报告</h1>
+<p style="color: #64748b;">生成时间: {{ report.created_at if report.created_at else "实时分析" }}</p>
+
+<div>
+    <div class="stat-card"><div class="stat-number">{{ report.total_messages or 0 }}</div><div class="stat-label">总消息数</div></div>
+    <div class="stat-card"><div class="stat-number">{{ report.student_count or 0 }}</div><div class="stat-label">活跃学生</div></div>
+    <div class="stat-card"><div class="stat-number">{{ "%.1f"|format((report.ai_message_ratio or 0) * 100) }}%</div><div class="stat-label">AI 参与率</div></div>
+</div>
+
+{% if report.top10 %}
+<h2>热门知识点 TOP10</h2>
+<table>
+    <tr><th>#</th><th>知识点</th><th>参与次数</th></tr>
+    {% for item in report.top10 %}
+    <tr><td>{{ loop.index }}</td><td>{{ item.tag }}</td><td>{{ item.count }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% if report.weak_tags %}
+<h2>薄弱知识点</h2>
+<div class="weak">
+    {% for tag in report.weak_tags %}
+    <span class="badge bg-danger me-1">{{ tag }}</span>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if report.weak_analysis %}
+<h2>薄弱分析</h2>
+<p>{{ report.weak_analysis }}</p>
+{% endif %}
+
+{% if report.suggestion %}
+<h2>教学建议</h2>
+<div class="suggestion">{{ report.suggestion }}</div>
+{% endif %}
+{% endblock %}

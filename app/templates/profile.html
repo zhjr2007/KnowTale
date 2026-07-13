@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}个人中心{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-4"><i class="bi bi-person-gear me-2"></i>个人资料</h5>
+
+                <div id="profile-alert"></div>
+
+                <div class="text-center mb-4">
+                    <div class="position-relative d-inline-block">
+                        <img id="avatar-preview" src="{{ user.avatar or '/static/images/default-avatar.png' }}"
+                             class="rounded-circle border shadow-sm"
+                             style="width: 120px; height: 120px; object-fit: cover;"
+                             onerror="this.src='https://ui-avatars.com/api/?name={{ user.display_name or user.username }}&background=1a56db&color=fff&size=120'">
+                        <label for="avatar-input" class="position-absolute bottom-0 end-0 btn btn-light btn-sm rounded-circle shadow-sm" style="cursor: pointer;">
+                            <i class="bi bi-camera"></i>
+                        </label>
+                        <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/gif,image/webp" class="d-none">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label text-muted small">用户名</label>
+                    <input type="text" class="form-control" value="{{ user.username }}" disabled>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label text-muted small">邮箱</label>
+                    <input type="text" class="form-control" value="{{ user.email }}" disabled>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label text-muted small">昵称</label>
+                    <input type="text" id="display-name-input" class="form-control" value="{{ user.display_name or user.username }}">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label text-muted small">角色</label>
+                    <input type="text" class="form-control" value="{% if user.role == 'teacher' %}老师{% else %}学生{% endif %}" disabled>
+                </div>
+
+                <button id="save-profile-btn" class="btn btn-primary w-100" onclick="saveProfile()">
+                    <i class="bi bi-check-lg me-1"></i>保存修改
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let newAvatarFile = null;
+
+document.getElementById('avatar-input').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+        showToast('仅支持 jpg/png/gif/webp 格式的图片', 'danger');
+        return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('头像文件大小不能超过 2MB', 'danger');
+        return;
+    }
+    newAvatarFile = file;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('avatar-preview').src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+});
+
+async function saveProfile() {
+    var btn = document.getElementById('save-profile-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>保存中...';
+
+    var formData = new FormData();
+    var displayName = document.getElementById('display-name-input').value.trim();
+    if (displayName) {
+        formData.append('display_name', displayName);
+    }
+    if (newAvatarFile) {
+        formData.append('avatar', newAvatarFile);
+    }
+
+    try {
+        var resp = await fetch('/api/auth/user/profile/update', { method: 'POST', body: formData });
+        if (resp.ok) {
+            showToast('资料已更新', 'success');
+            newAvatarFile = null;
+        } else {
+            var err = await resp.json();
+            showToast(err.detail || '保存失败', 'danger');
+        }
+    } catch (e) {
+        showToast('网络错误', 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>保存修改';
+    }
+}
+
+
+</script>
+{% endblock %}

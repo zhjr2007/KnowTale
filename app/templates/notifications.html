@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}通知{% endblock %}
+{% block extra_head %}
+<style>
+    .notification-card {
+        transition: background-color 0.2s;
+        border-left: 4px solid transparent;
+    }
+    .notification-card.unread {
+        border-left-color: #0d6efd;
+        background-color: #f8f9ff;
+    }
+    .notification-card:hover {
+        background-color: #f0f0f0;
+    }
+    .notification-time {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    .unread-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #0d6efd;
+        display: inline-block;
+    }
+    .type-icon {
+        font-size: 1.4rem;
+        width: 40px;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="bi bi-bell me-2"></i>通知</h4>
+        <button class="btn btn-outline-primary btn-sm" id="markAllReadBtn">
+            <i class="bi bi-check-all me-1"></i>全部已读
+        </button>
+    </div>
+    <div id="notificationList"></div>
+    <div id="loadMoreContainer" class="text-center mt-3" style="display:none;">
+        <button class="btn btn-outline-secondary" id="loadMoreBtn">加载更多</button>
+    </div>
+    <div id="emptyState" class="text-center py-5" style="display:none;">
+        <i class="bi bi-bell-slash" style="font-size:3rem;color:#dee2e6;"></i>
+        <p class="text-muted mt-2">暂无通知</p>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const TYPE_ICONS = {
+    enrollment_approved: 'bi-check-circle-fill text-success',
+    enrollment_rejected: 'bi-x-circle-fill text-danger',
+    quiz_published: 'bi-file-earmark-text-fill text-primary',
+    weekly_report: 'bi-graph-up-arrow text-info',
+};
+const TYPE_DEFAULT_ICON = 'bi-bell-fill text-secondary';
+
+let currentPage = 1;
+let hasMore = true;
+let isLoading = false;
+
+function timeAgo(dateStr) {
+    const now = new Date();
+    const d = new Date(dateStr);
+    const diff = Math.floor((now - d) / 1000);
+    if (diff < 60) return '刚刚';
+    if (diff < 3600) return Math.floor(diff / 60) + '分钟前';
+    if (diff < 86400) return Math.floor(diff / 3600) + '小时前';
+    if (diff < 2592000) return Math.floor(diff / 86400) + '天前';
+    return d.toLocaleDateString('zh-CN');
+}
+
+function getTypeIcon(type) {
+    return TYPE_ICONS[type] || TYPE_DEFAULT_ICON;
+}
+
+function renderNotifications(notifications) {
+    const container = document.getElementById('notificationList');
+    notifications.forEach(n => {
+        const iconClass = getTypeIcon(n.type);
+        const card = document.createElement('div');
+        card.className = 'card notification-card mb-2' + (n.is_read ? '' : ' unread');
+        card.style.cursor = n.course_id ? 'pointer' : 'default';
+        card.innerHTML = `
+            <div class="card-body py-3 d-flex align-items-start">
+                <div class="type-icon me-3">
+                    <i class="bi ${iconClass}"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>${n.title}</strong>
+                            ${n.is_read ? '' : '<span class="unread-dot ms-2"></span>'}
+                        </div>
+                        <small class="notification-time ms-2">${timeAgo(n.created_at)}</small>
+                    </div>
+                    ${n.content ? `<p class="mb-0 mt-1 text-muted small">${n.content}</p>` : ''}
+                </div>
+            </div>
+        `;
+        if (n.course_id) {
+            card.addEventListener('click', () => {
+                window.location.href = '/courses/' + n.course_id;
+            });
+        }
+        if (!n.is_read) {
+            card.addEventListener('click', (e) => {
+                e.stopPropagation();
+                markAsRead(n.id, card);
+            });
+            const clickHandler = card._clickHandler;
+            if (!n.course_id) {
+                card.addEventListener('click', () => markAsRead(n.id, card));
+            }
+        }
+        container.appendChild(card);
+    });
+    updateUnreadCount();
+}
+
+async function markAsRead(id, card) {
+    try {
+        const resp = await fetch('/api/notifications/' + id + '/read', { method: 'POST' });
+        if (resp.ok) {
+            card.classList.remove('unread');
+            const dot = card.querySelector('.unread-dot');
+            if (dot) dot.remove();
+            updateUnreadCount();
+        }
+    } catch (e) {}
+}
+
+async function loadNotifications() {
+    if (isLoading || !hasMore) return;
+    isLoading = true;
+    try {
+        const resp = await fetch(`/api/notifications?page=${currentPage}&page_size=20`);
+        const data = await resp.json();
+        if (data.notifications.length > 0) {
+            renderNotifications(data.notifications);
+            currentPage++;
+            hasMore = currentPage <= Math.ceil(data.total / 20);
+        } else {
+            hasMore = false;
+        }
+        document.getElementById('loadMoreContainer').style.display = hasMore ? 'block' : 'none';
+        document.getElementById('emptyState').style.display = (currentPage === 1 && data.notifications.length === 0) ? 'block' : 'none';
+    } catch (e) {}
+    isLoading = false;
+}
+
+async function updateUnreadCount() {
+    try {
+        const resp = await fetch('/api/notifications?page=1&page_size=1&unread_only=true');
+        const data = await resp.json();
+        const badge = document.getElementById('unreadBadge');
+        if (badge) {
+            if (data.unread_count > 0) {
+                badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    } catch (e) {}
+}
+
+document.getElementById('loadMoreBtn').addEventListener('click', loadNotifications);
+document.getElementById('markAllReadBtn').addEventListener('click', async () => {
+    try {
+        const resp = await fetch('/api/notifications/read-all', { method: 'POST' });
+        if (resp.ok) {
+            document.querySelectorAll('.notification-card.unread').forEach(c => {
+                c.classList.remove('unread');
+                const dot = c.querySelector('.unread-dot');
+                if (dot) dot.remove();
+            });
+            updateUnreadCount();
+        }
+    } catch (e) {}
+});
+
+loadNotifications();
+</script>
+{% endblock %}

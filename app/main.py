@@ -12,11 +12,12 @@ from app.database import init_db
 from app.dependencies import get_current_user, require_user
 from app.database import get_db
 from app.models.user import User
-from app.routers import auth, courses, knowledge, tools, analytics
+from app.routers import auth, courses, knowledge, tools, analytics, chat, notifications
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR.parent / "static"
+UPLOADS_DIR = BASE_DIR.parent / "uploads"
 
 
 _jinja_env = Environment(
@@ -42,11 +43,14 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 app.include_router(auth.router)
 app.include_router(courses.router)
 app.include_router(knowledge.router)
 app.include_router(tools.router)
 app.include_router(analytics.router)
+app.include_router(chat.router)
+app.include_router(notifications.router)
 
 
 @app.get("/")
@@ -76,6 +80,14 @@ async def dashboard(
     return render_template("dashboard.html", request=request, user=user)
 
 
+@app.get("/profile")
+async def profile_page(
+    request: Request,
+    user: User = Depends(require_user),
+):
+    return render_template("profile.html", request=request, user=user)
+
+
 @app.get("/courses/{course_id}")
 async def course_detail(
     request: Request,
@@ -83,6 +95,15 @@ async def course_detail(
     user: User = Depends(require_user),
 ):
     return render_template("course_detail.html", request=request, user=user, course_id=course_id)
+
+
+@app.get("/chat/{course_id}")
+async def chat_page(
+    request: Request,
+    course_id: int,
+    user: User = Depends(require_user),
+):
+    return render_template("chat.html", request=request, user=user, course_id=course_id)
 
 
 @app.get("/courses/{course_id}/roles")
@@ -237,6 +258,14 @@ async def analytics_page(
     return render_template("analytics.html", request=request, user=user, course_id=course_id)
 
 
+@app.get("/notifications")
+async def notifications_page(
+    request: Request,
+    user: User = Depends(require_user),
+):
+    return render_template("notifications.html", request=request, user=user)
+
+
 @app.get("/quiz/list/{course_id}")
 async def quiz_list_page(
     request: Request,
@@ -252,3 +281,12 @@ async def quiz_list_page(
         "quiz_list.html", request=request, user=user,
         course_id=course_id, course_name=course.name if course else "",
     )
+
+
+@app.get("/study-plan/{course_id}")
+async def study_plan_page(
+    request: Request,
+    course_id: int,
+    user: User = Depends(require_user),
+):
+    return render_template("study_plan.html", request=request, user=user, course_id=course_id)

@@ -1,8 +1,13 @@
-.env
-.git
 __pycache__
 *.pyc
-data/
+*.pyo
+.git
 .gitignore
-*.md
+.env
+data/
+uploads/*.db
+README.md
+NOTICE.md
 docs/
+public/plugins/
+edu-modules/
