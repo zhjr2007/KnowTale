@@ -1,5 +1,7 @@
 import uuid
 import re
+import time
+import logging
 from typing import Any
 
 import httpx
@@ -8,6 +10,8 @@ from chromadb.config import Settings as ChromaSettings
 
 from app.config import settings
 from app.services.llm import embed_text, embed_texts
+
+logger = logging.getLogger(__name__)
 
 _chroma_client: Any = None
 
@@ -126,14 +130,25 @@ async def rerank(query: str, documents: list[dict], top_k: int = 5) -> list[dict
                     **documents[idx],
                     "relevance_score": item.get("relevance_score", item.get("score", 0)),
                 })
+
+            reranked.sort(key=lambda x: x["relevance_score"], reverse=True)
             return reranked
-    except Exception:
+    except Exception as e:
+        logger.warning("Rerank API 调用失败 (%s)，回退到前 %d 个候选", e, top_k)
         return documents[:top_k]
 
 
 async def search(course_id: int, query: str, top_k: int = 5) -> list[dict]:
+    t0 = time.time()
     candidates = await retrieve(course_id, query, top_k=20)
-    return await rerank(query, candidates, top_k=top_k)
+    t1 = time.time()
+    results = await rerank(query, candidates, top_k=top_k)
+    t2 = time.time()
+    logger.info(
+        "检索耗时: retrieve=%.3fs, rerank=%.3fs, total=%.3fs, candidates=%d, results=%d",
+        t1 - t0, t2 - t1, t2 - t0, len(candidates), len(results),
+    )
+    return results
 
 
 async def clear_course_knowledge(course_id: int):

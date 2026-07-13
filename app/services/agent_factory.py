@@ -1,7 +1,44 @@
 import json
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel
 
 from app.services.llm import chat_completion
+
+
+class SpeechRule(BaseModel):
+    activity_level: float = 0.5
+    trigger_mode: Literal["round_robin", "at", "keyword", "mixed"] = "round_robin"
+    keywords: list[str] = []
+    min_interval: int = 3
+
+
+class RoleSpeechConfig(BaseModel):
+    teacher: SpeechRule = SpeechRule(
+        activity_level=0.4, trigger_mode="round_robin", min_interval=5
+    )
+    basic: SpeechRule = SpeechRule(
+        activity_level=0.6, trigger_mode="keyword",
+        keywords=["基础", "入门", "基本概念", "不懂", "简单"],
+        min_interval=3,
+    )
+    medium: SpeechRule = SpeechRule(
+        activity_level=0.5, trigger_mode="mixed",
+        keywords=["考点", "考试", "易错", "重点"],
+        min_interval=3,
+    )
+    advanced: SpeechRule = SpeechRule(
+        activity_level=0.4, trigger_mode="keyword",
+        keywords=["为什么", "原理", "拓展", "假如", "深层"],
+        min_interval=4,
+    )
+    senior: SpeechRule = SpeechRule(
+        activity_level=0.3, trigger_mode="at", min_interval=5,
+    )
+
+
+def get_default_speech_rules() -> dict:
+    return json.loads(RoleSpeechConfig().model_dump_json())
 
 TEACHER_PROMPT = """你是一个AI教师角色卡生成器。根据课程信息和教学风格，生成JSON格式的角色卡。
 输出格式（仅输出JSON，不要包含markdown代码块标记）：

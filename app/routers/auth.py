@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr
 
 from app.database import get_db
 from app.models.user import User
-from app.dependencies import create_access_token, get_current_user
+from app.dependencies import create_access_token, get_current_user, require_user, require_teacher
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -31,6 +31,16 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ResetPasswordRequest(BaseModel):
+    user_id: int
+    new_password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
 
 
 @router.post("/register")
@@ -103,3 +113,31 @@ async def me(user: User = Depends(get_current_user)):
         "role": user.role,
         "display_name": user.display_name,
     }
+
+
+@router.post("/reset-password")
+async def reset_password(
+    req: ResetPasswordRequest,
+    teacher: User = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == req.user_id))
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    student.hashed_password = _hash_password(req.new_password)
+    await db.commit()
+    return {"message": "密码已重置"}
+
+
+@router.post("/change-password")
+async def change_password(
+    req: ChangePasswordRequest,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not _verify_password(req.old_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="旧密码错误")
+    user.hashed_password = _hash_password(req.new_password)
+    await db.commit()
+    return {"message": "密码已修改"}

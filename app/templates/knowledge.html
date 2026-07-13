@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}知识库管理{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <a href="/courses/{{ course_id }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>返回课程
+    </a>
+</div>
+<div class="card shadow-sm border-0">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-database me-2"></i>知识库管理</h5>
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-upload me-1"></i>上传新文档</button>
+        </div>
+        <div id="kb-stats" class="row g-3 mb-4">
+            <div class="col-md-4"><div class="p-3 bg-light rounded text-center"><div class="h4 mb-0 text-primary" id="doc-count">0</div><small class="text-muted">文档数</small></div></div>
+            <div class="col-md-4"><div class="p-3 bg-light rounded text-center"><div class="h4 mb-0 text-primary" id="chunk-count">0</div><small class="text-muted">总知识片段</small></div></div>
+            <div class="col-md-4"><button class="btn btn-outline-secondary btn-sm w-100 h-100" id="rebuild-btn" onclick="rebuildKnowledge()"><i class="bi bi-arrow-repeat me-1"></i>重建索引</button></div>
+        </div>
+        <div id="doc-list" class="list-group"><div class="text-center text-muted py-3">加载中...</div></div>
+    </div>
+</div>
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">上传文档</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div id="upload-alert"></div>
+                <form id="upload-form">
+                    <div class="mb-3"><label class="form-label">选择文件（PDF、Word、PPT）</label><input type="file" name="file" class="form-control" accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md" required></div>
+                    <div class="progress mb-3 d-none" id="upload-progress"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">正在上传解析...</div></div>
+                    <button type="submit" class="btn btn-primary w-100">上传并索引</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const cid = {{ course_id }};
+async function loadDocs(){
+  try{
+    const r=await fetch("/api/knowledge/documents/"+cid);
+    if(r.ok){
+      const docs=await r.json();
+      document.getElementById("doc-count").textContent=docs.length;
+      const el=document.getElementById("doc-list");
+      if(!docs.length) el.innerHTML='<div class="text-center text-muted py-3">暂无文档</div>';
+      else el.innerHTML=docs.map(d=>'<div class="list-group-item d-flex justify-content-between align-items-center"><div><i class="bi bi-file-text me-2"></i><strong>'+d.filename+'</strong><span class="badge bg-light text-secondary ms-2">'+d.file_type+'</span></div><div class="d-flex align-items-center gap-3"><small class="text-muted">'+d.chunk_count+' 片段</small><small class="text-muted">'+(d.uploaded_at?new Date(d.uploaded_at).toLocaleString():"")+'</small><button class="btn btn-outline-danger btn-sm" onclick="delDoc('+d.id+')"><i class="bi bi-trash"></i></button></div></div>').join("");
+    }
+  }catch(e){}
+}
+async function loadCnt(){
+  try{
+    const r=await fetch("/api/knowledge/stats/"+cid);
+    if(r.ok){const d=await r.json();document.getElementById("chunk-count").textContent=d.chunk_count;}
+  }catch(e){}
+}
+async function delDoc(id){
+  if(!confirm("确定删除？"))return;
+  try{
+    const r=await fetch("/api/knowledge/documents/"+cid+"/"+id,{method:"DELETE"});
+    if(r.ok){loadDocs();loadCnt();}else alert("删除失败");
+  }catch(e){alert("网络错误");}
+}
+document.getElementById("upload-form")?.addEventListener("submit",async function(e){
+  e.preventDefault();
+  const f=new FormData(this),p=document.getElementById("upload-progress");
+  p.classList.remove("d-none");
+  document.getElementById("upload-alert").innerHTML="";
+  try{
+    const r=await fetch("/api/knowledge/upload/"+cid,{method:"POST",body:f});
+    p.classList.add("d-none");
+    if(r.ok){bootstrap.Modal.getInstance(document.getElementById("uploadModal")).hide();this.reset();loadDocs();loadCnt();}
+    else{document.getElementById("upload-alert").innerHTML='<div class="alert alert-danger">上传失败</div>';}
+  }catch(e){p.classList.add("d-none");document.getElementById("upload-alert").innerHTML='<div class="alert alert-danger">网络错误</div>';}
+});
+async function rebuildKnowledge(){
+  if(!confirm("确定重建索引？"))return;
+  const b=document.getElementById("rebuild-btn");b.disabled=true;b.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>重建中...';
+  try{
+    const r=await fetch("/api/knowledge/rebuild/"+cid,{method:"POST"});
+    if(r.ok){loadDocs();loadCnt();alert("重建完成");}else alert("重建失败");
+  }catch(e){alert("网络错误");}finally{b.disabled=false;b.innerHTML='<i class="bi bi-arrow-repeat me-1"></i>重建索引';}
+}
+document.addEventListener("DOMContentLoaded",()=>{loadDocs();loadCnt();});
+</script>
+{% endblock %}

@@ -12,7 +12,7 @@ from app.database import init_db
 from app.dependencies import get_current_user, require_user
 from app.database import get_db
 from app.models.user import User
-from app.routers import auth, courses, knowledge, tools
+from app.routers import auth, courses, knowledge, tools, analytics
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -46,6 +46,7 @@ app.include_router(auth.router)
 app.include_router(courses.router)
 app.include_router(knowledge.router)
 app.include_router(tools.router)
+app.include_router(analytics.router)
 
 
 @app.get("/")
@@ -82,6 +83,24 @@ async def course_detail(
     user: User = Depends(require_user),
 ):
     return render_template("course_detail.html", request=request, user=user, course_id=course_id)
+
+
+@app.get("/courses/{course_id}/roles")
+async def roles_page(
+    request: Request,
+    course_id: int,
+    user: User = Depends(require_user),
+):
+    return render_template("roles.html", request=request, user=user, course_id=course_id)
+
+
+@app.get("/knowledge/{course_id}")
+async def knowledge_page(
+    request: Request,
+    course_id: int,
+    user: User = Depends(require_user),
+):
+    return render_template("knowledge.html", request=request, user=user, course_id=course_id)
 
 
 @app.get("/quiz/{quiz_id}")
@@ -198,6 +217,15 @@ async def mindmap_page(
     user: User = Depends(require_user),
 ):
     return render_template("mindmap.html", request=request, user=user, course_id=course_id)
+
+
+@app.get("/analytics/{course_id}")
+async def analytics_page(
+    request: Request,
+    course_id: int,
+    user: User = Depends(require_user),
+):
+    return render_template("analytics.html", request=request, user=user, course_id=course_id)
 
 
 @app.get("/quiz/list/{course_id}")
