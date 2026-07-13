@@ -9,6 +9,17 @@
 
 <h5 class="fw-bold mb-3"><i class="bi bi-shuffle me-2"></i>知识点抽背</h5>
 
+<div class="btn-group mb-3 w-100" role="group">
+    <input type="radio" class="btn-check" name="mode" id="mode-self" value="self" checked>
+    <label class="btn btn-outline-primary" for="mode-self"><i class="bi bi-person me-1"></i>独立抽背</label>
+    <input type="radio" class="btn-check" name="mode" id="mode-peer" value="peer">
+    <label class="btn btn-outline-primary" for="mode-peer"><i class="bi bi-people me-1"></i>AI 陪练</label>
+</div>
+
+<div id="review-mode-hint" class="small text-muted mb-3 text-center">
+    <i class="bi bi-info-circle me-1"></i>独立答题，AI 自动批改
+</div>
+
 <div id="review-card" class="card shadow-sm border-0 mb-3">
     <div class="card-body text-center py-5">
         <div class="spinner-border spinner-border-sm text-primary mb-3"></div>
@@ -24,6 +35,8 @@
         </button>
     </form>
 </div>
+
+<div id="review-peer-area" class="d-none"></div>
 
 <div id="review-feedback" class="d-none"></div>
 
@@ -43,6 +56,109 @@ let used = [];
 let currentQuestion = '';
 let currentAnswer = '';
 let currentPoint = '';
+let currentMode = 'self';
+let peerUsed = [];
+
+document.querySelectorAll('input[name="mode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        currentMode = this.value;
+        if (currentMode === 'peer') {
+            document.getElementById('review-mode-hint').innerHTML = '<i class="bi bi-info-circle me-1"></i>观看 AI 学生答题，对比学习';
+            document.getElementById('review-actions').classList.add('d-none');
+            document.getElementById('review-peer-area').classList.add('d-none');
+            document.getElementById('review-feedback').classList.add('d-none');
+            document.getElementById('next-btn').classList.add('d-none');
+            document.getElementById('reveal-btn').classList.add('d-none');
+            peerUsed = [];
+            startPeerReview();
+        } else {
+            document.getElementById('review-mode-hint').innerHTML = '<i class="bi bi-info-circle me-1"></i>独立答题，AI 自动批改';
+            document.getElementById('review-peer-area').classList.add('d-none');
+            document.getElementById('review-feedback').classList.add('d-none');
+            document.getElementById('next-btn').classList.add('d-none');
+            document.getElementById('reveal-btn').classList.add('d-none');
+            used = [];
+            nextQuestion();
+        }
+    });
+});
+
+async function startPeerReview() {
+    document.getElementById('review-card').innerHTML = '<div class="card-body text-center py-5"><div class="spinner-border spinner-border-sm text-primary mb-3"></div><p class="text-muted">准备陪练题目...</p></div>';
+    try {
+        const resp = await fetch('/api/review/peer/{{ course_id }}', { method: 'POST' });
+        if (!resp.ok) {
+            document.getElementById('review-card').innerHTML = '<div class="alert alert-danger">启动陪练失败</div>';
+            return;
+        }
+        const data = await resp.json();
+        currentQuestion = data.question;
+        currentPoint = data.knowledge_point;
+        currentAnswer = data.correct_answer;
+        peerUsed.push(currentPoint);
+        renderPeerCard(data);
+    } catch (e) {
+        document.getElementById('review-card').innerHTML = '<div class="alert alert-danger">网络错误</div>';
+    }
+}
+
+async function nextPeerQuestion() {
+    document.getElementById('review-card').innerHTML = '<div class="card-body text-center py-5"><div class="spinner-border spinner-border-sm text-primary mb-3"></div><p class="text-muted">加载中...</p></div>';
+    document.getElementById('review-peer-area').classList.add('d-none');
+    document.getElementById('next-btn').classList.add('d-none');
+    try {
+        const resp = await fetch(`/api/review/peer/question/{{ course_id }}?skip=${peerUsed.join(',')}`);
+        if (!resp.ok) {
+            document.getElementById('review-card').innerHTML = '<div class="card-body text-center py-5 text-success"><i class="bi bi-trophy" style="font-size:2rem"></i><p class="mt-2">所有知识点已复习完毕！</p></div>';
+            return;
+        }
+        const data = await resp.json();
+        currentQuestion = data.question;
+        currentPoint = data.knowledge_point;
+        currentAnswer = data.correct_answer;
+        peerUsed.push(currentPoint);
+        renderPeerCard(data);
+    } catch (e) {
+        document.getElementById('review-card').innerHTML = '<div class="alert alert-danger">加载失败</div>';
+    }
+}
+
+function renderPeerCard(data) {
+    document.getElementById('review-card').innerHTML = `
+        <div class="card-body">
+            <span class="badge bg-light text-primary mb-2">${data.knowledge_point}</span>
+            <h5 class="fw-bold mt-2">${data.question}</h5>
+        </div>
+    `;
+    const peerArea = document.getElementById('review-peer-area');
+    peerArea.classList.remove('d-none');
+    peerArea.innerHTML = `
+        <div class="card shadow-sm border-0 mb-3 border-start border-info border-4">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <span class="badge bg-info text-white me-2">${data.persona.type} ${data.persona.name}</span>
+                    <small class="text-muted">AI 学生回答</small>
+                </div>
+                <p class="mb-0">${data.peer_answer}</p>
+            </div>
+        </div>
+        <div class="card shadow-sm border-0 mb-3 border-start border-success border-4">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <span class="badge bg-success text-white me-2">参考答案</span>
+                    <small class="text-muted">正确答案与解析</small>
+                </div>
+                <p class="mb-0">${data.correct_answer}</p>
+            </div>
+        </div>
+        <div class="alert alert-light small mb-0">
+            <i class="bi bi-lightbulb me-1"></i>
+            对比一下：AI ${data.persona.type}学生${data.persona.name}的回答与参考答案的差异在哪里？
+        </div>
+    `;
+    document.getElementById('next-btn').classList.remove('d-none');
+    document.getElementById('next-btn').onclick = nextPeerQuestion;
+}
 
 async function nextQuestion() {
     document.getElementById('review-card').innerHTML = '<div class="card-body text-center py-5"><div class="spinner-border spinner-border-sm text-primary mb-3"></div><p class="text-muted">加载中...</p></div>';
@@ -125,6 +241,8 @@ function revealAnswer() {
     document.getElementById('reveal-btn').classList.add('d-none');
 }
 
-document.addEventListener('DOMContentLoaded', nextQuestion);
+document.addEventListener('DOMContentLoaded', () => {
+    nextQuestion();
+});
 </script>
 {% endblock %}

@@ -94,6 +94,15 @@ async def roles_page(
     return render_template("roles.html", request=request, user=user, course_id=course_id)
 
 
+@app.get("/courses/{course_id}/applications")
+async def applications_page(
+    request: Request,
+    course_id: int,
+    user: User = Depends(require_user),
+):
+    return render_template("applications.html", request=request, user=user, course_id=course_id)
+
+
 @app.get("/knowledge/{course_id}")
 async def knowledge_page(
     request: Request,
